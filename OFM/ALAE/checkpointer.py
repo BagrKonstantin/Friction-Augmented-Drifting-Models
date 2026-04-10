@@ -93,7 +93,7 @@ class Checkpointer(object):
         base_dir = os.path.dirname(os.path.dirname(output_dir))
         f = os.path.join(base_dir, f)
         
-        checkpoint = torch.load(f, map_location=torch.device("cpu"))
+        checkpoint = torch.load(f, map_location=torch.device("cpu"), weights_only=False)
         for name, model in self.models.items():
             if name in checkpoint["models"]:
                 try:

@@ -26,14 +26,17 @@ class GradNNGeneric(nn.Module):
                 only_inputs=True,
                 grad_outputs=torch.ones_like(pot_outputs, requires_grad=False)
             )[0]
+            if not output.requires_grad and any(p.requires_grad for p in self.parameters()):
+                 print(f"[DEBUG] push: output.requires_grad is False but model has params with requires_grad=True")
+                 print(f"[DEBUG] pot_outputs.requires_grad={pot_outputs.requires_grad}")
             return output
         else:
-            output = torch.zeros_like(input, requires_grad=False)
+            outputs = []
             for j in range(0, input.size(0), self.batch_size):
-                output[j: j + self.batch_size] = self.push(
+                outputs.append(self.push(
                     input[j:j + self.batch_size],
-                     create_graph=create_graph, retain_graph=retain_graph)
-            return output
+                    create_graph=create_graph, retain_graph=retain_graph))
+            return torch.cat(outputs, dim=0)
     
     def push_nograd(self, input):
         '''

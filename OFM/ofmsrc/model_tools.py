@@ -11,7 +11,8 @@ from .inverse import (
 from .inverse import (
     InvMethodParamsGeneric,
     TorchoptimInvParams,
-    TorchlbfgsInvParams
+    TorchlbfgsInvParams,
+    ManualInvParams
 )
 from .ihv import ofm_ihv
 from .ihv import (
@@ -129,6 +130,12 @@ def ofm_loss(
         elapsed_times['ihv'] = time.perf_counter() - t_ihv
 
         rhs = model.push(Z0)
+
+        if not rhs.requires_grad:
+             print(f"[DEBUG] ofm_loss: rhs.requires_grad is False! Z0.requires_grad={Z0.requires_grad}")
+             print(f"[DEBUG] model parameters count: {len(list(model.parameters()))}")
+             if len(list(model.parameters())) > 0:
+                 print(f"[DEBUG] first param requires_grad: {next(model.parameters()).requires_grad}")
 
         assert lhs.shape == rhs.shape
         loss = reduction_func((lhs * rhs).sum(dim = 1))
