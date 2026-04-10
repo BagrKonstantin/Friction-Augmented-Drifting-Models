@@ -368,7 +368,7 @@ with tqdm(range(MAX_STEPS)) as tbar:
         tbar.set_postfix(
             loss=loss.item(),
             scale=info["scale"].item(),
-            f_norm=info["friction_coeff"].item(),
+            # f_norm=info["friction_coeff"].item(),
             y_std=Y_gen.std().item(),
             friction_coeff=friction_coeff,
         )
