@@ -374,7 +374,7 @@ with tqdm(range(MAX_STEPS)) as tbar:
         )
 
         if step % 5000 == 0:
-            torch.save(model.state_dict(), os.path.join(OUTPUT_PATH, 'model.pth'))
+            torch.save(model.state_dict(), os.path.join(OUTPUT_PATH, 'model_friction.pth'))
 
 # ── Final Evaluation ───────────────────────────────────────────────────
 print("Computing final FID and CMMD on the entire test set...")
