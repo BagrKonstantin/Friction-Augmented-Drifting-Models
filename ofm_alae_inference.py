@@ -23,11 +23,8 @@ DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 DIM = 512
 EXP_NAME = 'ofm_ALAE_ADULT_TO_CHILDREN'
 OFM_MODEL_DIR = f'./checkpoints/{EXP_NAME}'
-OFM_MODEL_PATH = os.path.join(OFM_MODEL_DIR, 'model_0.999.pth')
-if not os.path.exists(OFM_MODEL_PATH):
-    OFM_MODEL_PATH = os.path.join(OFM_MODEL_DIR, 'model.pth')
-if not os.path.exists(OFM_MODEL_PATH):
-    OFM_MODEL_PATH = os.path.join(OFM_MODEL_DIR, 'D_latest.pth')
+
+OFM_MODEL_PATH = os.path.join(OFM_MODEL_DIR, 'D_latest.pth')
 
 # ── Load OFM Model (DenseICNN) ──────────────────────────────────────────
 def load_ofm_model(path):
