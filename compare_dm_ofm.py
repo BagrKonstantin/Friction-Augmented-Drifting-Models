@@ -27,6 +27,7 @@ DATA_PATH = "OFM/data"
 DM_EXP_NAME = 'dm_ALAE_ADULT_TO_CHILDREN'
 OFM_EXP_NAME = 'ofm_ALAE_ADULT_TO_CHILDREN'
 DM_MODEL_PATH = f'./checkpoints/{DM_EXP_NAME}/model.pth'
+DMF_MODEL_PATH = f'./checkpoints/{DM_EXP_NAME}/model_friction.pth'
 
 # OFM model can be name model_0.999.pth or model.pth or D_latest.pth
 OFM_MODEL_PATH = f'./checkpoints/{OFM_EXP_NAME}/model_0.999.pth'
@@ -55,7 +56,7 @@ class MLP(nn.Module):
 
 def load_dm_model(path):
     if os.path.exists(path):
-        print(f"Loading Drifting Model weights from {path}...")
+        print(f"Loading Model weights from {path}...")
         ckpt = torch.load(path, map_location=DEVICE, weights_only=False)
         if isinstance(ckpt, dict):
             model = MLP(dim=DIM, dimh=1024, num_hidden_layers=3).to(DEVICE)
@@ -67,7 +68,7 @@ def load_dm_model(path):
             ckpt.eval()
             return ckpt
     else:
-        print(f"Error: DM model not found at {path}")
+        print(f"Error: Model not found at {path}")
         sys.exit(1)
 
 def load_ofm_model(path):
@@ -128,16 +129,18 @@ def main():
     alae_model.to(DEVICE)
     alae_model.eval()
 
-    print("Loading DM and OFM models...")
+    print("Loading DM, DMF (friction), and OFM models...")
     dm_model = load_dm_model(DM_MODEL_PATH)
+    dmf_model = load_dm_model(DMF_MODEL_PATH)
     ofm_model = load_ofm_model(OFM_MODEL_PATH)
 
     # 3. Inference
     print("Running inference...")
     
-    # DM Mapping needs no grad
+    # DM and DMF Mapping needs no grad
     with torch.no_grad():
         dm_mapped = dm_model(X_test_selected)
+        dmf_mapped = dmf_model(X_test_selected)
     
     # OFM Mapping: push_nograd internally creates its own grad-enabled context for input,
     # but the model parameters must also allow tracing if they are part of the potential.
@@ -150,6 +153,7 @@ def main():
         # decode handles batch processing
         decoded_original = decode(alae_model, X_test_selected)
         decoded_dm = decode(alae_model, dm_mapped)
+        decoded_dmf = decode(alae_model, dmf_mapped)
         decoded_ofm = decode(alae_model, ofm_mapped)
         
         # Post-process to [0, 255] uint8 numpy
@@ -158,12 +162,14 @@ def main():
         
         orig_imgs = to_numpy(decoded_original)
         dm_imgs = to_numpy(decoded_dm)
+        dmf_imgs = to_numpy(decoded_dmf)
         ofm_imgs = to_numpy(decoded_ofm)
 
     # 4. Visualization
-    print("Saving comparison to comparison_dm_ofm.png...")
+    output_filename = 'comparison_dm_dmf_ofm.png'
+    print(f"Saving comparison to {output_filename}...")
     n = len(selected_inds)
-    fig, axes = plt.subplots(n, 3, figsize=(9, 3 * n), dpi=150)
+    fig, axes = plt.subplots(n, 4, figsize=(12, 3 * n), dpi=150)
     
     for i in range(n):
         # Column 0: Original/Adult
@@ -176,13 +182,18 @@ def main():
         if i == 0: axes[i, 1].set_title("DM (Child)")
         axes[i, 1].axis('off')
 
-        # Column 2: OFM Child
-        axes[i, 2].imshow(ofm_imgs[i])
-        if i == 0: axes[i, 2].set_title("OFM (Child)")
+        # Column 2: DMF Child
+        axes[i, 2].imshow(dmf_imgs[i])
+        if i == 0: axes[i, 2].set_title("DM Friction (Child)")
         axes[i, 2].axis('off')
 
+        # Column 3: OFM Child
+        axes[i, 3].imshow(ofm_imgs[i])
+        if i == 0: axes[i, 3].set_title("OFM (Child)")
+        axes[i, 3].axis('off')
+
     plt.tight_layout()
-    plt.savefig('comparison_dm_ofm.png')
+    plt.savefig(output_filename)
     print("Done!")
 
 if __name__ == "__main__":
