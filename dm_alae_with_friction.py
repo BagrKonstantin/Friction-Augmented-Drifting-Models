@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+import datetime
 import os, sys
 import random
 import numpy as np
@@ -40,7 +41,7 @@ TARGET_DATA = "CHILDREN"
 
 BATCH_SIZE = 515
 D_LR = 5e-4
-MAX_STEPS = 10001
+MAX_STEPS = 30001
 r_list = (0.005, 0.01, 0.02)
 
 
@@ -390,6 +391,10 @@ with torch.no_grad():
 
     print(f"\nFinal FID over {len(X_test)} samples = {fid_score:.4f}")
     print(f"Final CMMD over {len(X_test)} samples = {cmmd_score:.4f}")
+    with open(os.path.join(OUTPUT_PATH, f"target_stats_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"), "w") as f:
+        f.write("Experiment: " + EXP_NAME + "\n")
+        f.write(f"cmmd_score: {cmmd_score:.4f}\n")
+        f.write(f"fid_score: {fid_score:.4f}\n")
 model.train()
 
 # ── Results Visualization ──────────────────────────────────────────────

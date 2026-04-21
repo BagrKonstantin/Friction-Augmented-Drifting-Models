@@ -1,0 +1,19 @@
+[project]
+name = "flow-matching-experiments"
+version = "0.1.0"
+description = "Comparative experiments for Flow Matching methods (OFM, DM, DMF)"
+requires-python = ">=3.12"
+dependencies = []
+
+[project.authors]
+[
+    {name = "Arkadii Kazanskii"},
+    {name = "Tatiana Petrova"},
+    {name = "Konstantin Bagrianskii"},
+    {name = "Aleksandr Puzikov"},
+    {name = "Radu State"},
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
