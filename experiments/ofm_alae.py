@@ -20,15 +20,15 @@ from OFM.ofmsrc.model_tools import ofm_loss, TorchlbfgsInvParams, BruteforceIHVP
 from OFM.ofmsrc.discrete_ot import OTPlanSampler
 
 def train(
-    max_steps=10002,
-    compute_metrics=True,
-    batch_size=128,
-    lr=1e-3,
-    inv_tolerance=1e-2,
-    seed=0xBADBEEF,
-    input_data="ADULT",
-    target_data="CHILDREN",
-    output_path=None
+        max_steps=10002,
+        compute_metrics=True,
+        batch_size=128,
+        lr=1e-3,
+        inv_tolerance=1e-2,
+        seed=0xBADBEEF,
+        input_data="ADULT",
+        target_data="CHILDREN",
+        output_path=None
 ):
     device = get_device()
     seed_all(seed)
@@ -49,7 +49,7 @@ def train(
         "target_data": target_data,
     }
     save_config(config, output_path)
-    
+
     # ── Data Loading ──────────────────────────────────────────────────────
     DATA_PATH = "../OFM/data"
     try:
@@ -123,16 +123,18 @@ def train(
                 y_std=Y.std().item()
             )
 
+
             if compute_metrics and step > 0 and step % 2000 == 0:
                 D.eval()
+                X_test_input = X_test.to(device).float().requires_grad_(True)
+                mapped_test = D.push_nograd(X_test_input)
                 with torch.no_grad():
-                    mapped_test = D.push_nograd(X_test.to(device))
                     gen_fid_act, _ = evaluator.get_eval_features(mapped_test.cpu(), batch_size=64)
                     mu_gen, sigma_gen = evaluator.get_stats(gen_fid_act)
                     fid_score = evaluator.calculate_fid(mu_gen, sigma_gen, mu_target, sigma_target)
                     print(f"\nStep {step} | FID: {fid_score:.4f}")
                 D.train()
-                
+
             if step > 0 and step % 2000 == 0:
                 torch.save(D.state_dict(), os.path.join(output_path, 'checkpoint.pth'))
 
@@ -146,8 +148,9 @@ def train(
     if compute_metrics:
         print("Computing final FID and CMMD on the entire test set...")
         D.eval()
+        X_test_input = X_test.to(device).float().requires_grad_(True)
+        mapped_test = D.push_nograd(X_test_input)
         with torch.no_grad():
-            mapped_test = D.push_nograd(X_test.to(device))
             gen_fid_act, gen_cmmd_act = evaluator.get_eval_features(mapped_test.cpu())
 
             mu_gen, sigma_gen = evaluator.get_stats(gen_fid_act)
@@ -156,13 +159,13 @@ def train(
 
             print(f"\nFinal FID over {len(X_test)} samples = {fid_score:.4f}")
             print(f"Final CMMD over {len(X_test)} samples = {cmmd_score:.4f}")
-            
+
             final_metrics.update({
                 "fid": float(fid_score),
                 "cmmd": float(cmmd_score)
             })
         D.train()
-    
+
     save_metrics(final_metrics, output_path)
 
     # ── Results Visualization ──────────────────────────────────────────────
