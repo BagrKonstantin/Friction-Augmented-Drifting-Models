@@ -31,12 +31,12 @@ def train(
     seed_all(seed)
 
     if output_path is None:
-        output_path = get_run_dir("dm", seed)
+        output_path = get_run_dir("dm_mf", seed)
     os.makedirs(output_path, exist_ok=True)
 
     # Save config
     config = {
-        "method": "dm",
+        "method": "dm_mf",
         "max_steps": max_steps,
         "batch_size": batch_size,
         "lr": lr,
@@ -145,7 +145,7 @@ def train(
 
     # ── Results Visualization ──────────────────────────────────────────────
     if evaluator.alae_model:
-        save_comparison_plot(model, X_test, x_inds_test, test_inp_images, evaluator.alae_model, device, os.path.join(output_path, 'dm_transfer_faces.png'), "DM Mapped")
+        save_comparison_plot(model, X_test, x_inds_test, test_inp_images, evaluator.alae_model, device, os.path.join(output_path, 'dm_mf_transfer_faces.png'), "DM Mapped")
 
 
 if __name__ == "__main__":
@@ -154,7 +154,7 @@ if __name__ == "__main__":
     parser.add_argument("--no_metrics", action="store_true", help="Disable FID/CMMD evaluation")
     parser.add_argument("--batch_size", type=int, default=515)
     parser.add_argument("--lr", type=float, default=5e-4)
-    parser.add_argument("--output_path", type=str, default='./experiments/results/dm_alae')
+    parser.add_argument("--output_path", type=str, default='./experiments/results/dm_alae_mf')
     args = parser.parse_args()
 
     train(
