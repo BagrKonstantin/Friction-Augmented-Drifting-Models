@@ -5,7 +5,8 @@ import argparse
 import time
 from tqdm import tqdm
 
-from exp_utils import seed_all, get_device, setup_paths, get_run_dir, save_config, save_metrics
+from exp_utils import seed_all, get_device, setup_paths, get_run_dir, save_config, save_metrics, load_or_compute_target_stats
+
 setup_paths()
 
 from data_loader import download_data, download_alae_model, load_alae_data
@@ -88,10 +89,9 @@ def train(
     target_cmmd_act = None
 
     if compute_metrics:
-        print(f"Precomputing FID & CMMD stats for {target_data} on the entire test set...")
-        target_fid_act, target_cmmd_act = evaluator.get_eval_features(Y_test)
-        mu_target, sigma_target = evaluator.get_stats(target_fid_act)
-        print(f"Target stats computed on {len(target_fid_act)} samples.")
+        target_cmmd_act, target_fid_act, mu_target, sigma_target = load_or_compute_target_stats(
+            output_path, evaluator, Y_test, target_data
+        )
 
     # ── Training Loop ──────────────────────────────────────────────────────
     print(f"Starting training: ofm_ALAE_{input_data}_TO_{target_data}")
