@@ -37,7 +37,7 @@ def setup_paths():
 
 def get_run_dir(method_name, seed):
     from datetime import datetime
-    timestamp = datetime.now().strftime("%d-%m-%Y-%H-%M")
+    timestamp = datetime.now().strftime("%d-%m-%Y")
     run_name = f"{timestamp}_{method_name}_{seed}"
     run_dir = os.path.join("experiments", "runs", run_name)
     os.makedirs(run_dir, exist_ok=True)
@@ -52,39 +52,3 @@ def save_metrics(metrics, run_dir):
     import json
     with open(os.path.join(run_dir, "metrics.json"), "w") as f:
         json.dump(metrics, f, indent=4)
-
-def load_or_compute_target_stats(output_path, evaluator, Y_test, target_data):
-    """
-    Load or compute FID & CMMD statistics for the target distribution.
-    
-    Args:
-        output_path: Directory where stats will be saved/loaded
-        evaluator: MetricsEvaluator instance
-        Y_test: Target test data
-        target_data: Name of target dataset (for logging)
-    
-    Returns:
-        tuple: (target_cmmd_act, target_fid_act, mu_target, sigma_target)
-    """
-    stats_file = os.path.join(output_path, "cmmd_fid.npz")
-    
-    if os.path.exists(stats_file):
-        print("Loading precomputed FID & CMMD stats for target distribution...")
-        stats = np.load(stats_file)
-        target_cmmd_act = stats["target_cmmd_act"]
-        target_fid_act = stats["target_fid_act"]
-        mu_target = stats["mu_target"]
-        sigma_target = stats["sigma_target"]
-        print(f"Loaded target stats computed on {len(target_cmmd_act)} samples.")
-    else:
-        print(f"Precomputing FID & CMMD stats for {target_data} on the entire test set...")
-        target_fid_act, target_cmmd_act = evaluator.get_eval_features(Y_test)
-        mu_target, sigma_target = evaluator.get_stats(target_fid_act)
-        print(f"Target stats computed on {len(target_fid_act)} samples.")
-        np.savez(stats_file, 
-                 target_cmmd_act=target_cmmd_act, 
-                 target_fid_act=target_fid_act, 
-                 mu_target=mu_target, 
-                 sigma_target=sigma_target)
-    
-    return target_cmmd_act, target_fid_act, mu_target, sigma_target

@@ -1,0 +1,130 @@
+[
+  {
+    "training_time": 290.5636661709286,
+    "gamma_schedule": "none",
+    "seed": 42,
+    "fid": 10.86126771551153,
+    "cmmd": 0.00762939453125,
+    "label": "A0"
+  },
+  {
+    "training_time": 286.13393190922216,
+    "gamma_schedule": "none",
+    "seed": 123,
+    "fid": 10.667126915764754,
+    "cmmd": 0.0059604644775390625,
+    "label": "A0"
+  },
+  {
+    "gamma_schedule": "none",
+    "seed": 777,
+    "label": "A0",
+    "error": "[Errno 28] No space left on device"
+  },
+  {
+    "gamma_schedule": "const_0.25",
+    "seed": 42,
+    "label": "A1",
+    "error": "[Errno 28] No space left on device: './experiments/runs/friction_sweep/23-04-2026_17-50/A1_const_0.25_seed42'"
+  },
+  {
+    "gamma_schedule": "const_0.25",
+    "seed": 123,
+    "label": "A1",
+    "error": "[Errno 28] No space left on device: './experiments/runs/friction_sweep/23-04-2026_17-50/A1_const_0.25_seed123'"
+  },
+  {
+    "gamma_schedule": "const_0.25",
+    "seed": 777,
+    "label": "A1",
+    "error": "[Errno 28] No space left on device: './experiments/runs/friction_sweep/23-04-2026_17-50/A1_const_0.25_seed777'"
+  },
+  {
+    "gamma_schedule": "const_0.5",
+    "seed": 42,
+    "label": "A2",
+    "error": "[Errno 28] No space left on device: './experiments/runs/friction_sweep/23-04-2026_17-50/A2_const_0.5_seed42'"
+  },
+  {
+    "gamma_schedule": "const_0.5",
+    "seed": 123,
+    "label": "A2",
+    "error": "[Errno 28] No space left on device: './experiments/runs/friction_sweep/23-04-2026_17-50/A2_const_0.5_seed123'"
+  },
+  {
+    "gamma_schedule": "const_0.5",
+    "seed": 777,
+    "label": "A2",
+    "error": "[Errno 28] No space left on device: './experiments/runs/friction_sweep/23-04-2026_17-50/A2_const_0.5_seed777'"
+  },
+  {
+    "gamma_schedule": "const_0.75",
+    "seed": 42,
+    "label": "A3",
+    "error": "[Errno 28] No space left on device: './experiments/runs/friction_sweep/23-04-2026_17-50/A3_const_0.75_seed42'"
+  },
+  {
+    "gamma_schedule": "const_0.75",
+    "seed": 123,
+    "label": "A3",
+    "error": "[Errno 28] No space left on device: './experiments/runs/friction_sweep/23-04-2026_17-50/A3_const_0.75_seed123'"
+  },
+  {
+    "gamma_schedule": "const_0.75",
+    "seed": 777,
+    "label": "A3",
+    "error": "[Errno 28] No space left on device: './experiments/runs/friction_sweep/23-04-2026_17-50/A3_const_0.75_seed777'"
+  },
+  {
+    "gamma_schedule": "linear",
+    "seed": 42,
+    "label": "A4",
+    "error": "[Errno 28] No space left on device: './experiments/runs/friction_sweep/23-04-2026_17-50/A4_linear_seed42'"
+  },
+  {
+    "gamma_schedule": "linear",
+    "seed": 123,
+    "label": "A4",
+    "error": "[Errno 28] No space left on device: './experiments/runs/friction_sweep/23-04-2026_17-50/A4_linear_seed123'"
+  },
+  {
+    "gamma_schedule": "linear",
+    "seed": 777,
+    "label": "A4",
+    "error": "[Errno 28] No space left on device: './experiments/runs/friction_sweep/23-04-2026_17-50/A4_linear_seed777'"
+  },
+  {
+    "gamma_schedule": "quadratic",
+    "seed": 42,
+    "label": "A5",
+    "error": "[Errno 28] No space left on device: './experiments/runs/friction_sweep/23-04-2026_17-50/A5_quadratic_seed42'"
+  },
+  {
+    "gamma_schedule": "quadratic",
+    "seed": 123,
+    "label": "A5",
+    "error": "[Errno 28] No space left on device: './experiments/runs/friction_sweep/23-04-2026_17-50/A5_quadratic_seed123'"
+  },
+  {
+    "gamma_schedule": "quadratic",
+    "seed": 777,
+    "label": "A5",
+    "error": "[Errno 28] No space left on device: './experiments/runs/friction_sweep/23-04-2026_17-50/A5_quadratic_seed777'"
+  },
+  {
+    "gamma_schedule": "sqrt",
+    "seed": 42,
+    "label": "A6",
+    "error": "[Errno 28] No space left on device: './experiments/runs/friction_sweep/23-04-2026_17-50/A6_sqrt_seed42'"
+  },
+  {
+    "gamma_schedule": "sqrt",
+    "seed": 123,
+    "label": "A6",
+    "error": "[Errno 28] No space left on device: './experiments/runs/friction_sweep/23-04-2026_17-50/A6_sqrt_seed123'"
+  },
+  {
+    "gamma_schedule": "sqrt",
+    "seed": 777,
+    "label": "A6",
+    "error": "[Errno 28] No space left on device: './experiments/runs/friction_sweep/23-04-2026_17

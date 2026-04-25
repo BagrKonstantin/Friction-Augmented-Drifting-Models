@@ -15,8 +15,7 @@ def save_comparison_plot(model, x_test, x_inds_test, test_inp_images, alae_model
     inds_to_map = np.random.choice(available_test_inds, size=min(5, len(available_test_inds)), replace=False)
     latent_to_map = x_test[inds_to_map].to(device)
     
-    if hasattr(model, 'eval'):
-        model.eval()
+    model.eval()
     if is_icnn:
         mapped = model.push_nograd(latent_to_map)
     else:
