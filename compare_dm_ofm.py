@@ -21,7 +21,7 @@ except ImportError:
     sys.exit(1)
 
 # ── Parameters ──────────────────────────────────────────────────────────
-DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
+DEVICE = 'cpu'
 DIM = 512
 DATA_PATH = "OFM/data"
 DM_EXP_NAME = 'dm_ALAE_ADULT_TO_CHILDREN'
@@ -173,8 +173,8 @@ def main():
     
     for i in range(n):
         # Column 0: Original/Adult
-        axes[i, 0].imshow(orig_imgs[i])
-        if i == 0: axes[i, 0].set_title("Adult (Original)")
+        axes[i, 0].imshow(images_selected[i])
+        if i == 0: axes[i, 0].set_title("Adult (Dataset)")
         axes[i, 0].axis('off')
 
         # Column 1: DM Child
