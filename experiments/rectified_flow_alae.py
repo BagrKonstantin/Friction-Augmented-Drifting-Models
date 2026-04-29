@@ -34,6 +34,29 @@ from visualization import save_comparison_plot
 from OFM.ofmsrc.tools import EMA
 from OFM.ofmsrc.alae_distributions import TensorSampler
 
+from rectified_flow_model import RFUNet
+
+
+class LatentRFUNet(nn.Module):
+    """Wraps RFUNet to operate on flat latent vectors [B, latent_dim]."""
+
+    def __init__(self, latent_dim=512, spatial_ch=2, spatial_size=16):
+        super().__init__()
+        assert spatial_ch * spatial_size * spatial_size == latent_dim, \
+            f"spatial_ch * spatial_size^2 must equal latent_dim ({latent_dim})"
+        self.spatial_ch = spatial_ch
+        self.spatial_size = spatial_size
+        self.net = RFUNet(in_channels=spatial_ch)
+
+    def forward(self, z, t):
+        B = z.shape[0]
+        if t.dim() == 2:
+            t = t.squeeze(1)                    # [B]
+        t_scaled = (t * 999).long()             # float [0,1] → int [0,999]
+        x = z.view(B, self.spatial_ch, self.spatial_size, self.spatial_size)
+        out = self.net(x, t_scaled)
+        return out.view(B, -1)
+
 
 class TimeConditionedMLP(nn.Module):
     """
@@ -253,14 +276,8 @@ def train(
         torch.cuda.empty_cache() if device == 'cuda' else None
 
     # ── Model Initialisation ──────────────────────────────────────────────
-    DIM = 512
-    model = TimeConditionedMLP(
-        dim=DIM, 
-        hidden_dim=hidden_dim, 
-        num_layers=num_layers,
-        activation=activation
-    ).to(device)
-    
+    model = LatentRFUNet().to(device)
+
     # For 2-RF, optionally initialize with 1-RF weights for faster training
     if reflow_from_checkpoint:
         try:
@@ -276,11 +293,7 @@ def train(
     optim = torch.optim.Adam(model.parameters(), lr=lr)
     ema = EMA(0, betas=[0.999, 0.99])
 
-    print(f"\nModel architecture:")
-    print(f"  Input dim: {DIM} + 1 (time)")
-    print(f"  Hidden dim: {hidden_dim}")
-    print(f"  Num layers: {num_layers}")
-    print(f"  Activation: {activation}")
+    print(f"\nModel: LatentRFUNet (RFUNet U-Net, latent 512 → 2×16×16)")
     print(f"  Total params: {sum(p.numel() for p in model.parameters()):,}")
 
     # ── Eval Metrics Setup ───────────────────────────────────────────────

@@ -24,8 +24,8 @@ class MetricsEvaluator:
 
     def _setup_models(self):
         print("Setting up Evaluation models (FID & CMMD)...")
-        self.alae_model = load_model("../OFM/ALAE/configs/ffhq.yaml",
-                                    training_artifacts_dir="../OFM/ALAE/training_artifacts/ffhq/").to(self.device)
+        self.alae_model = load_model("./OFM/ALAE/configs/ffhq.yaml",
+                                    training_artifacts_dir="./OFM/ALAE/training_artifacts/ffhq/").to(self.device)
         self.inception_model = InceptionV3([3]).to(self.device)
         self.inception_model.eval()
 
