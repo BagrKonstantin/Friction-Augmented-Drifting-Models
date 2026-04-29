@@ -2,6 +2,8 @@
 import os
 import sys
 import random
+import glob
+import argparse
 import numpy as np
 import torch
 import torch.nn as nn
@@ -24,17 +26,27 @@ except ImportError:
 DEVICE = 'cpu'
 DIM = 512
 DATA_PATH = "OFM/data"
-DM_EXP_NAME = 'dm_ALAE_ADULT_TO_CHILDREN'
-OFM_EXP_NAME = 'ofm_ALAE_ADULT_TO_CHILDREN'
-DM_MODEL_PATH = f'./checkpoints/{DM_EXP_NAME}/model.pth'
-DMF_MODEL_PATH = f'./checkpoints/{DM_EXP_NAME}/model_friction.pth'
+RUNS_DIR = "experiments/runs"
 
-# OFM model can be name model_0.999.pth or model.pth or D_latest.pth
-OFM_MODEL_PATH = f'./checkpoints/{OFM_EXP_NAME}/model_0.999.pth'
-if not os.path.exists(OFM_MODEL_PATH):
-    OFM_MODEL_PATH = f'./checkpoints/{OFM_EXP_NAME}/model.pth'
-if not os.path.exists(OFM_MODEL_PATH):
-    OFM_MODEL_PATH = f'./checkpoints/{OFM_EXP_NAME}/D_latest.pth'
+# ── Helper for dynamic path discovery ──────────────────────────────────
+def get_model_path(model_type, seed):
+    """
+    Finds the model path in experiments/runs based on model_type and seed.
+    Pattern: experiments/runs/*_{model_type}_{seed}/checkpoint_final.pth
+    """
+    pattern = os.path.join(RUNS_DIR, f"*_{model_type}_{seed}")
+    dirs = glob.glob(pattern)
+    if not dirs:
+        print(f"Error: No run directory found for model_type='{model_type}' and seed='{seed}' in {RUNS_DIR}")
+        sys.exit(1)
+    
+    run_dir = dirs[0]
+    model_path = os.path.join(run_dir, "checkpoint_final.pth")
+    if not os.path.exists(model_path):
+        print(f"Error: Model file not found at {model_path}")
+        sys.exit(1)
+    
+    return model_path
 
 # ── DM Model Logic (Redefined as in dm_alae.py) ──────────────────────────
 class MLP(nn.Module):
@@ -90,6 +102,18 @@ def load_ofm_model(path):
 
 # ── Main ─────────────────────────────────────────────────────────────
 def main():
+    parser = argparse.ArgumentParser(description="Compare DM, DMF, and OFM models for a given seed.")
+    parser.add_argument("--seed", type=int, default=42, help="Training seed to use (e.g., 42, 777, 123)")
+    args = parser.parse_args()
+    
+    seed = args.seed
+    print(f"--- Comparing models for seed: {seed} ---")
+
+    # Discover paths
+    dm_model_path = get_model_path("dm", seed)
+    dmf_model_path = get_model_path("dmf", seed)
+    ofm_model_path = get_model_path("ofm", seed)
+
     # 1. Load Data
     print("Loading test dataset...")
     try:
@@ -130,9 +154,9 @@ def main():
     alae_model.eval()
 
     print("Loading DM, DMF (friction), and OFM models...")
-    dm_model = load_dm_model(DM_MODEL_PATH)
-    dmf_model = load_dm_model(DMF_MODEL_PATH)
-    ofm_model = load_ofm_model(OFM_MODEL_PATH)
+    dm_model = load_dm_model(dm_model_path)
+    dmf_model = load_dm_model(dmf_model_path)
+    ofm_model = load_ofm_model(ofm_model_path)
 
     # 3. Inference
     print("Running inference...")
@@ -142,15 +166,11 @@ def main():
         dm_mapped = dm_model(X_test_selected)
         dmf_mapped = dmf_model(X_test_selected)
     
-    # OFM Mapping: push_nograd internally creates its own grad-enabled context for input,
-    # but the model parameters must also allow tracing if they are part of the potential.
-    # More importantly, if we are in a global no_grad block, autograd.grad will fail.
-    # So we call it outside of any no_grad block.
+    # OFM Mapping
     ofm_mapped = ofm_model.push_nograd(X_test_selected)
     
     with torch.no_grad():
         # Decode all
-        # decode handles batch processing
         decoded_original = decode(alae_model, X_test_selected)
         decoded_dm = decode(alae_model, dm_mapped)
         decoded_dmf = decode(alae_model, dmf_mapped)
@@ -166,14 +186,14 @@ def main():
         ofm_imgs = to_numpy(decoded_ofm)
 
     # 4. Visualization
-    output_filename = 'comparison_dm_dmf_ofm.png'
+    output_filename = f'comparison_seed_{seed}.png'
     print(f"Saving comparison to {output_filename}...")
     n = len(selected_inds)
     fig, axes = plt.subplots(n, 4, figsize=(12, 3 * n), dpi=150)
     
     for i in range(n):
         # Column 0: Original/Adult
-        axes[i, 0].imshow(images_selected[i])
+        axes[i, 0].imshow(orig_imgs[i])
         if i == 0: axes[i, 0].set_title("Adult (Dataset)")
         axes[i, 0].axis('off')
 
