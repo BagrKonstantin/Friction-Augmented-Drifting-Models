@@ -22,6 +22,8 @@ except ImportError:
     print("Error: Required modules not found. Ensure OFM/ALAE and OFM/ofmsrc exist.")
     sys.exit(1)
 
+# np.random.seed(42)
+
 # ── Parameters ──────────────────────────────────────────────────────────
 DEVICE = 'cpu'
 DIM = 512
@@ -193,7 +195,7 @@ def main():
     
     for i in range(n):
         # Column 0: Original/Adult
-        axes[i, 0].imshow(orig_imgs[i])
+        axes[i, 0].imshow(images_selected[i])
         if i == 0: axes[i, 0].set_title("Adult (Dataset)")
         axes[i, 0].axis('off')
 
