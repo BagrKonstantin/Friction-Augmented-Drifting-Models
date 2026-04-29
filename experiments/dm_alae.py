@@ -152,7 +152,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--max_steps", type=int, default=10001)
     parser.add_argument("--no_metrics", action="store_true", help="Disable FID/CMMD evaluation")
-    parser.add_argument("--batch_size", type=int, default=515)
+    parser.add_argument("--batch_size", type=int, default=128)
     parser.add_argument("--lr", type=float, default=5e-4)
     parser.add_argument("--output_path", type=str, default='./experiments/results/dm_alae')
     args = parser.parse_args()

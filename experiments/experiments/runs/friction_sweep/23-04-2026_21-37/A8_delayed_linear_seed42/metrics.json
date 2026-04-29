@@ -1,0 +1,7 @@
+{
+    "training_time": 302.12282581301406,
+    "gamma_schedule": "delayed_linear",
+    "seed": 42,
+    "fid": 10.418004543282223,
+    "cmmd": 0.00476837158203125
+}
