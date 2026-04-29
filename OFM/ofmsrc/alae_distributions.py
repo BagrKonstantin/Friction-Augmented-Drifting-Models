@@ -56,8 +56,8 @@ class TensorSampler(Sampler):
     def sample(self, size=5):
         assert size <= self.tensor.shape[0]
         
-        ind = torch.tensor(np.random.choice(np.arange(self.tensor.shape[0]), size=size, replace=False), device=self.device)
-        return torch.clone(self.tensor[ind]).detach().to(self.device)
+        ind = torch.randperm(self.tensor.shape[0], device=self.device)[:size]
+        return self.tensor[ind].clone()
 
 
 class SwissRollSampler(Sampler):

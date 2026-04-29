@@ -6,7 +6,7 @@ from torch.nn import ModuleList
 import string
 import torch.nn.functional as F
 
-import simple_updown_sampling as up_or_down_sampling
+import experiments.simple_updown_sampling as up_or_down_sampling
 
 
 def get_timestep_embedding(timesteps, embedding_dim, max_positions=10000):

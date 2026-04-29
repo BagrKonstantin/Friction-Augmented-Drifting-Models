@@ -23,18 +23,18 @@ import time
 from tqdm import tqdm
 import torch.nn.functional as F
 
-from exp_utils import seed_all, get_device, setup_paths, get_run_dir, save_config, save_metrics, load_or_compute_target_stats
+from experiments.exp_utils import seed_all, get_device, setup_paths, get_run_dir, save_config, save_metrics, load_or_compute_target_stats
 setup_paths()
 
-from data_loader import download_data, download_alae_model, load_alae_data
-from eval_metrics import MetricsEvaluator
-from visualization import save_comparison_plot
+from experiments.data_loader import download_data, download_alae_model, load_alae_data
+from experiments.eval_metrics import MetricsEvaluator
+from experiments.visualization import save_comparison_plot
 
 # OFM Specific Imports
 from OFM.ofmsrc.tools import EMA
 from OFM.ofmsrc.alae_distributions import TensorSampler
 
-from rectified_flow_model import RFUNet
+from experiments.rectified_flow.rectified_flow_model import RFUNet
 
 
 class LatentRFUNet(nn.Module):
@@ -112,7 +112,6 @@ class TimeConditionedMLP(nn.Module):
         
         return velocity
 
-
 class RectifiedFlow:
     """
     Rectified Flow model for learning optimal transport between two distributions.
@@ -172,7 +171,7 @@ class RectifiedFlow:
         
         z = z0.clone()
         
-        for step in range(num_steps):
+        for step in tqdm(range(num_steps), desc="Sampling ODE"):
             t = torch.ones((batch_size, 1), device=z.device) * (step / num_steps)
             
             # Predict velocity
@@ -188,7 +187,9 @@ def train(
     max_steps=10001,
     compute_metrics=True,
     batch_size=512,
+    reflow_batch_size=512,
     lr=1e-3,
+    model_name="LatentRFUNet",
     num_ode_steps=100,
     hidden_dim=1024,
     num_layers=3,
@@ -197,7 +198,8 @@ def train(
     seed=0xBADBEEF,
     input_data="ADULT",
     target_data="CHILDREN",
-    output_path=None
+    output_path=None,
+    target_stats_path=None,
 ):
     device = get_device()
     seed_all(seed)
@@ -212,6 +214,7 @@ def train(
         "method": "rectified_flow",
         "max_steps": max_steps,
         "batch_size": batch_size,
+        "reflow_batch_size": reflow_batch_size,
         "lr": lr,
         "num_ode_steps": num_ode_steps,
         "hidden_dim": hidden_dim,
@@ -247,12 +250,11 @@ def train(
         
         # Load 1-RF model
         checkpoint = torch.load(reflow_from_checkpoint, map_location=device)
-        prev_model = TimeConditionedMLP(
-            dim=512,
-            hidden_dim=hidden_dim,
-            num_layers=num_layers,
-            activation=activation
-        ).to(device)
+        if model_name == "LatentRFUNet":
+            prev_model = LatentRFUNet().to(device)
+        elif model_name == "TimeConditionedMLP":
+            prev_model = TimeConditionedMLP(dim=512, hidden_dim=hidden_dim, num_layers=num_layers, activation=activation).to(device)
+
         prev_model.load_state_dict(checkpoint['model'])
         prev_model.eval()
         prev_flow = RectifiedFlow(prev_model, device=device)
@@ -260,14 +262,22 @@ def train(
         # Generate paired data by running 1-RF on source distribution
         print("Generating deterministic pairs (Z₀, Z₁) from 1-RF...")
         X_train = data["X_train"]
-        
+
+        Z0_chunks, Z1_chunks = [], []
+        n = len(X_train)
         with torch.no_grad():
-            Z0 = X_train.to(device)
-            Z1 = prev_flow.sample_ode(Z0, num_steps=num_ode_steps)
-            
-            # Update samplers with new paired data
-            X_sampler = TensorSampler(Z0.cpu(), device=device)
-            Y_sampler = TensorSampler(Z1.cpu(), device=device)
+            for start in tqdm(range(0, n, reflow_batch_size), desc="Reflow ODE batches"):
+                z0_batch = X_train[start:start + reflow_batch_size].to(device)
+                z1_batch = prev_flow.sample_ode(z0_batch, num_steps=num_ode_steps)
+                Z0_chunks.append(z0_batch.cpu())
+                Z1_chunks.append(z1_batch.cpu())
+
+        Z0 = torch.cat(Z0_chunks, dim=0)
+        Z1 = torch.cat(Z1_chunks, dim=0)
+
+        # Update samplers with new paired data
+        X_sampler = TensorSampler(Z0, device=device)
+        Y_sampler = TensorSampler(Z1, device=device)
         
         print(f"Generated {len(Z0)} paired samples for 2-RF training")
         print("Training 2-RF will learn straighter trajectories!")
@@ -276,7 +286,10 @@ def train(
         torch.cuda.empty_cache() if device == 'cuda' else None
 
     # ── Model Initialisation ──────────────────────────────────────────────
-    model = LatentRFUNet().to(device)
+    if model_name == "LatentRFUNet":    
+        model = LatentRFUNet().to(device)
+    elif model_name == "TimeConditionedMLP":
+        model = TimeConditionedMLP(dim=512, hidden_dim=hidden_dim, num_layers=num_layers, activation=activation).to(device)
 
     # For 2-RF, optionally initialize with 1-RF weights for faster training
     if reflow_from_checkpoint:
@@ -289,8 +302,8 @@ def train(
             print("Training from scratch")
     
     rectified_flow = RectifiedFlow(model, device=device)
-    
-    optim = torch.optim.Adam(model.parameters(), lr=lr)
+
+    optim = torch.optim.AdamW(model.parameters(), lr=lr, betas=(0.9, 0.999), weight_decay=1e-4)
     ema = EMA(0, betas=[0.999, 0.99])
 
     print(f"\nModel: LatentRFUNet (RFUNet U-Net, latent 512 → 2×16×16)")
@@ -303,8 +316,9 @@ def train(
     target_cmmd_act = None
 
     if compute_metrics:
+        stats_dir = target_stats_path if target_stats_path is not None else output_path
         target_cmmd_act, target_fid_act, mu_target, sigma_target = load_or_compute_target_stats(
-            output_path, evaluator, Y_test, target_data
+            stats_dir, evaluator, Y_test, target_data
         )
 
     # ── Training Loop ──────────────────────────────────────────────────────
@@ -397,20 +411,22 @@ def train(
         model.eval()
         with torch.no_grad():
             mapped_test_vis = rectified_flow.sample_ode(X_test.to(device), num_steps=num_ode_steps)
-        
+
         save_comparison_plot(
             lambda x: rectified_flow.sample_ode(x, num_steps=num_ode_steps),
-            X_test, 
-            x_inds_test, 
-            test_inp_images, 
-            evaluator.alae_model, 
-            device, 
+            X_test,
+            x_inds_test,
+            test_inp_images,
+            evaluator.alae_model,
+            device,
             os.path.join(output_path, 'rectified_flow_transfer.png'),
             f"Rectified Flow ({num_ode_steps} steps)"
         )
-        
+
     rf_label = "2-RF" if reflow_from_checkpoint else "1-RF"
     print(f"\n✓ {rf_label} training complete! Results saved to: {output_path}")
+
+    return final_metrics
 
 
 if __name__ == "__main__":
@@ -419,8 +435,10 @@ if __name__ == "__main__":
     parser.add_argument("--max_steps", type=int, default=10001, help="Number of training steps")
     parser.add_argument("--no_metrics", action="store_true", help="Disable FID/CMMD evaluation")
     parser.add_argument("--batch_size", type=int, default=512, help="Training batch size")
-    parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate")
-    parser.add_argument("--num_ode_steps", type=int, default=100, help="Number of ODE integration steps")
+    parser.add_argument("--reflow_batch_size", type=int, default=512, help="Batch size for ODE evaluation during reflow data generation")
+    parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate")
+    parser.add_argument("--model", type=str, default="LatentRFUNet", choices=["LatentRFUNet", "TimeConditionedMLP"], help="Model architecture to use")
+    parser.add_argument("--num_ode_steps", type=int, default=20, help="Number of ODE integration steps")
     parser.add_argument("--hidden_dim", type=int, default=1024, help="Hidden layer dimension")
     parser.add_argument("--num_layers", type=int, default=3, help="Number of MLP layers")
     parser.add_argument("--activation", type=str, default='tanh', choices=['tanh', 'relu'], help="Activation function")
@@ -433,8 +451,10 @@ if __name__ == "__main__":
         max_steps=args.max_steps,
         compute_metrics=not args.no_metrics,
         batch_size=args.batch_size,
+        reflow_batch_size=args.reflow_batch_size,
         lr=args.lr,
         num_ode_steps=args.num_ode_steps,
+        model_name=args.model,
         hidden_dim=args.hidden_dim,
         num_layers=args.num_layers,
         activation=args.activation,
