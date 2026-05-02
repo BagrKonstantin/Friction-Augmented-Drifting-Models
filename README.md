@@ -1,333 +1,233 @@
-# Flow Matching Experiments
+# Attraction, Repulsion, and Friction: Introducing DMF
 
-A comprehensive research repository for comparing different Flow Matching methods for generative modeling, with a focus on image-to-image translation tasks using ALAE (Adversarial Latent AutoEncoder) latent spaces.
+> **Paper**: [arXiv:2604.18194](https://arxiv.org/abs/2604.18194)  
+> **University of Luxembourg** — Arkadii Kazanskii, Tatiana Petrova, Konstantin Bagrianskii, Aleksandr Puzikov, Radu State
 
-## Overview
+---
 
-This repository implements and compares three state-of-the-art generative modeling approaches:
+A research codebase for **image-to-image translation in ALAE latent space**, comparing five generative modeling methods on face attribute transformations (Adult ↔ Children, Man ↔ Woman) using the FFHQ dataset.
 
-- **OFM (Optimal Flow Matching)**: Learns straight trajectories in a single Flow Matching step by solving optimal transport
-- **DM (Diffusion Models / Drifting)**: Standard diffusion-based generative modeling approach
-- **DMF (Diffusion Models with Friction)**: Enhanced diffusion models with friction dynamics
+## Methods
 
-All methods are evaluated on face attribute transformation tasks (e.g., Adult → Children, Man → Woman) using FFHQ face dataset latent representations.
-## Recent Updates (April 21, 2026)
-
-The repository was recently refactored to provide a modular, production-ready codebase:
-
-- ✅ **Decomposed implementations**: Separated OFM, DM, and DMF into independent, maintainable modules
-- ✅ **Deterministic experiments**: Added full reproducibility with seed management
-- ✅ **Wall-clock timing**: Built-in performance benchmarking
-- ✅ **Checkpoint support**: Automatic model checkpointing during training
-- ✅ **Unified evaluation**: Consistent FID and CMMD metrics across all methods
-- ✅ **Multi-seed runner**: Easy batch experimentation across random seeds
+| Method | Description | Training | Inference | OT coupling |
+|--------|-------------|----------|-----------|-------------|
+| **DMF** | Drifting Model with Friction — our proposed method | Medium | Fast | — |
+| **DM** | Baseline Drifting Model (Lambert et al., 2025) | Medium | Fast | — |
+| **OFM** | Optimal Flow Matching via ICNN (Kornilov et al., 2024) | High | 1-step | ✅ Global |
+| **OT-CFM** | Conditional Flow Matching with mini-batch OT (Tong et al., 2024) | Medium | ODE | ✅ Mini-batch |
+| **RF** | Rectified Flow with optional reflow (Liu et al., 2023) | Medium | ODE / 1-step | — |
 
 ## Repository Structure
 
 ```
 FlowMatching/
-├── experiments/              # Modular experiment framework (NEW)
-│   ├── dm_alae.py           # Diffusion Model implementation
-│   ├── dmf_alae.py          # Diffusion Model with Friction
-│   ├── ofm_alae.py          # Optimal Flow Matching implementation
-│   ├── data_loader.py       # Data loading utilities
-│   ├── eval_metrics.py      # FID & CMMD evaluation
-│   ├── models_and_losses.py # Neural network architectures and loss functions
-│   ├── exp_utils.py         # Experiment utilities (seeding, paths, configs)
-│   ├── visualization.py     # Plotting and visualization tools
-│   └── run_multiple_seeds.py # Multi-seed experiment runner
+├── experiments/              # Main experiment framework — all 5 methods
+│   ├── otcfm/                # OT-CFM training, inference, multi-seed runner
+│   ├── rectified_flow/       # Rectified Flow (1-RF, 2-RF) training & inference
+│   ├── dm_alae.py            # Drifting Model
+│   ├── dmf_alae.py           # Drifting Model with Friction (ours)
+│   ├── ofm_alae.py           # Optimal Flow Matching
+│   ├── data_loader.py        # FFHQ data loading & automatic download
+│   ├── eval_metrics.py       # FID & CMMD evaluation
+│   ├── models_and_losses.py  # MLP architectures and drift loss
+│   ├── exp_utils.py          # Seeding, path setup, config & metrics I/O
+│   ├── visualization.py      # Face comparison plots
+│   └── run_multiple_seeds.py # Multi-seed batch runner (DM + DMF)
 │
-├── CFM/                     # TorchCFM library (Conditional Flow Matching)
-├── OFM/                     # Optimal Flow Matching (NeurIPS 2024)
-├── DM/                      # Drifting/Diffusion Models (JAX implementation)
-├── cmmd_pytorch/            # CMMD metric implementation
+├── OFM/                      # Optimal Flow Matching (NeurIPS 2024)
+│   └── ALAE/                 # Pre-trained ALAE weights & decoder
+├── CFM/                      # TorchCFM library (MIT)
+├── RectifiedFlow/            # Official RF implementation (ICLR 2023)
+├── DM/                       # Drifting Models reference (JAX)
+├── cmmd_pytorch/             # CLIP-MMD metric
 │
-├── checkpoints/             # Saved model checkpoints
-├── models/                  # Trained models
-├── pics_in/                 # Input images for inference
-├── pics_out/                # Generated output images
-│
-├── *.py                     # Legacy standalone scripts
-├── *.ipynb                  # Jupyter notebooks for exploration
-└── requirements.txt         # Python dependencies
+├── checkpoints/              # Saved model checkpoints
+├── pics_in/ pics_out/        # Inference image I/O
+├── *.ipynb                   # Jupyter notebooks (toy problems, tutorials)
+└── requirements.txt
 ```
 
 ## Installation
 
-### Prerequisites
+**Requirements**: Python 3.12, CUDA GPU (recommended), 16 GB+ RAM.
 
-- Python 3.12
-- CUDA-compatible GPU (recommended)
-- 16GB+ RAM
-
-### Setup
-
-1. Clone the repository:
 ```bash
 git clone <repository-url>
 cd FlowMatching
-```
-
-2. Create and activate a virtual environment:
-```bash
 python3.12 -m venv .venv
-source .venv/bin/activate  # On Linux/Mac
-# or
-.venv\Scripts\activate  # On Windows
-```
-
-3. Install dependencies:
-```bash
+source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-4. Download required data and models (automatic on first run):
-   - FFHQ face latents and metadata
-   - Pre-trained ALAE model weights
-   - The download happens automatically when you first run any training script
+Data and model weights are **downloaded automatically** on first run (FFHQ latents + ALAE weights).
 
 ## Quick Start
 
-### Training a Single Model
+All scripts are run from the repository root. Each creates a timestamped directory under `experiments/runs/` with a config YAML, metrics JSON, checkpoint, and a face-comparison plot.
 
-Train Optimal Flow Matching:
-```bash
-python experiments/ofm_alae.py --max_steps 10000 --seed 42
-```
+### Train a single model
 
-Train Diffusion Model:
 ```bash
-python experiments/dm_alae.py --max_steps 10000 --seed 42
-```
-
-Train Diffusion Model with Friction:
-```bash
+# Drifting Model with Friction (DMF — ours)
 python experiments/dmf_alae.py --max_steps 10000 --seed 42
+
+# Drifting Model (baseline)
+python experiments/dm_alae.py --max_steps 10000 --seed 42
+
+# Optimal Flow Matching
+python experiments/ofm_alae.py --max_steps 10000 --seed 42
+
+# OT-CFM
+python experiments/otcfm/otcfm_alae.py --max_steps 10000 --seed 42
+
+# Rectified Flow (1-RF)
+python experiments/rectified_flow/rectified_flow_alae.py --max_steps 10000 --seed 42
+
+# Rectified Flow (2-RF — reflow pass)
+python experiments/rectified_flow/rectified_flow_alae.py --max_steps 10000 --seed 42 --reflow
 ```
 
-### Running Multi-Seed Experiments
-
-To run all three methods across multiple random seeds:
+### Multi-seed batch runs
 
 ```bash
-python experiments/run_multiple_seeds.py --max_steps 10000
+# DM + DMF across seeds [42, 123, 777, 1234, 2024]
+python experiments/run_multiple_seeds.py --max_steps 30000
+
+# OT-CFM across multiple seeds
+python experiments/otcfm/run_multiple_seeds_otcfm.py --max_steps 30000
+
+# Rectified Flow across multiple seeds
+python experiments/rectified_flow/run_multiple_seeds_rf.py --max_steps 30000
 ```
 
-This will train OFM, DM, and DMF with seeds [42, 123, 777] and save results to `experiments/runs/`.
+### Face attribute tasks
 
-### Disable Metrics (Faster Training)
-
-To skip FID/CMMD evaluation during training:
+Use `--input_data` / `--target_data` to select a translation task:
 
 ```bash
-python experiments/ofm_alae.py --no_metrics
-# or
-python experiments/run_multiple_seeds.py --no_metrics
+python experiments/dmf_alae.py --input_data ADULT --target_data CHILDREN --seed 42
+python experiments/dmf_alae.py --input_data MAN   --target_data WOMAN    --seed 42
 ```
 
-## Usage Details
+Supported values: `ADULT`, `CHILDREN`, `MAN`, `WOMAN`.
 
-### Command-Line Arguments
+### Inference on custom images
 
-Each training script supports the following arguments:
-
-**Common Arguments:**
-- `--max_steps`: Maximum training steps (default: 10001)
-- `--batch_size`: Training batch size
-- `--lr`: Learning rate
-- `--seed`: Random seed for reproducibility
-- `--no_metrics`: Disable FID/CMMD evaluation
-- `--input_data`: Source distribution (ADULT, CHILDREN, MAN, WOMAN)
-- `--target_data`: Target distribution (ADULT, CHILDREN, MAN, WOMAN)
-
-**OFM-specific:**
-- `--inv_tolerance`: Inverse tolerance for ICNN optimization (default: 1e-2)
-
-**DM/DMF-specific:**
-- `--r_list`: List of noise scales for drift loss (default: [0.005, 0.01, 0.02])
-- `--friction_on`: Enable/disable friction (DMF only)
-
-### Output Structure
-
-Each training run creates a timestamped directory in `experiments/runs/`:
-
-```
-experiments/runs/21-04-2026_ofm_42/
-├── config.yaml              # Training configuration
-├── metrics.json             # Final FID/CMMD scores
-├── model_final.pth          # Final model checkpoint
-├── comparison_plot.png      # Visual comparison of results
-└── training.log             # Training progress log
+```bash
+python experiments/otcfm/otcfm_inference.py       --checkpoint experiments/runs/<run_dir>/checkpoint_final.pth
+python experiments/rectified_flow/rectified_flow_inference.py --checkpoint experiments/runs/<run_dir>/checkpoint_final.pth
 ```
 
-## Data and Models
+## Command-Line Arguments
 
-### ALAE Model
+All training scripts share these common flags:
 
-The repository uses a pre-trained ALAE (Adversarial Latent AutoEncoder) model trained on FFHQ faces:
-- **Resolution**: 1024×1024
-- **Latent dimension**: 512
-- **Dataset**: FFHQ (Flickr-Faces-HQ)
+| Argument | Default | Description |
+|----------|---------|-------------|
+| `--max_steps` | 10001 | Training iterations |
+| `--batch_size` | method-dependent | Mini-batch size |
+| `--lr` | method-dependent | Learning rate |
+| `--seed` | 42 | Random seed |
+| `--input_data` | ADULT | Source distribution |
+| `--target_data` | CHILDREN | Target distribution |
+| `--no_metrics` | False | Skip FID/CMMD (faster) |
 
-The model is automatically downloaded on first run from the official weights repository.
+**DMF-specific**: `--friction_on`, `--r_list`  
+**OFM-specific**: `--inv_tolerance` (ICNN solver tolerance)
 
-### Face Attribute Datasets
+## Output Structure
 
-The data loader supports filtering faces by:
-- **Age**: ADULT (≥18), CHILDREN (<18)
-- **Gender**: MAN, WOMAN
+```
+experiments/runs/DD-MM-YYYY-HH-MM_<method>_<seed>/
+├── config.yaml              # Full training configuration
+├── metrics.json             # FID, CMMD, training_time_seconds
+├── checkpoint_final.pth     # Final model weights
+├── checkpoint.pth           # Mid-training checkpoint (step 2000)
+└── *_transfer_faces.png     # Source → generated face comparison
+```
 
-Data includes:
-- 60,000 training latents
-- 10,000 test latents
-- Age and gender metadata
+## Data
+
+The FFHQ dataset is used via **512-dimensional ALAE latent codes** (not raw pixels), which dramatically reduces training cost while preserving perceptual quality.
+
+| Split | Size | Content |
+|-------|------|---------|
+| Train | 60,000 | Latents + age/gender metadata |
+| Test  | 10,000 | Latents + reference RGB images |
+
+Attribute filters: **ADULT** (age ≥ 18), **CHILDREN** (age < 18), **MAN** (male), **WOMAN** (female).
+
+The ALAE decoder (1024×1024) reconstructs images from latents for FID/CMMD evaluation and visualization.
 
 ## Evaluation Metrics
 
-### FID (Fréchet Inception Distance)
+**FID** (Fréchet Inception Distance) — InceptionV3 feature space, lower is better.  
+**CMMD** (CLIP Maximum Mean Discrepancy) — CLIP embedding space, lower is better, more aligned with human perception.
 
-Measures the quality and diversity of generated images using InceptionV3 features.
-- **Lower is better**
-- Standard metric for generative models
-
-### CMMD (CLIP Maximum Mean Discrepancy)
-
-Measures semantic similarity between generated and target distributions using CLIP embeddings.
-- **Lower is better**
-- More aligned with human perception than FID
-
-Both metrics are computed automatically during training (unless `--no_metrics` is specified).
-
-## Methods Comparison
-
-| Method | Training Complexity | Inference Speed | Trajectory Quality | OT Solution |
-|--------|-------------------|-----------------|-------------------|-------------|
-| **OFM** | High (ICNN optimization) | Fast (1 step) | Straight paths | ✅ Yes |
-| **DM** | Medium | Medium (multiple steps) | Curved paths | ❌ No |
-| **DMF** | Medium | Medium (multiple steps) | Improved smoothness | ❌ No |
-
-## Legacy Scripts
-
-The repository also contains legacy standalone scripts for backward compatibility:
-
-- `ofm_alae.py`, `dm_alae.py`: Original monolithic implementations
-- `*_gaussian_mixture.py`: 2D Gaussian mixture experiments
-- `*_inference.py`: Inference-only scripts
-- `compare_dm_ofm.py`: Side-by-side comparison tool
-
-These scripts are superseded by the modular `experiments/` framework but remain for reference.
+Both are computed every 2000 steps and at the end of training. Use `--no_metrics` to disable during development.
 
 ## Notebooks
 
-Interactive Jupyter notebooks for exploration and visualization:
-
-- `tutorial_training_8_gaussians_to_moons.ipynb`: Tutorial on 2D toy problems
-- `dm_alae.ipynb`: Interactive DM experiments
-- `dm_gaussian_mixture*.ipynb`: 2D Gaussian mixture visualizations
-- `probmodels-flowmatching.ipynb`: Flow matching theory and examples
-- `main.ipynb`: Main experimental notebook
-
-## Troubleshooting
-
-### CUDA Out of Memory
-
-Reduce batch size:
-```bash
-python experiments/ofm_alae.py --batch_size 64
-```
-
-### Slow FID/CMMD Computation
-
-Disable metrics during training:
-```bash
-python experiments/ofm_alae.py --no_metrics
-```
-
-### Data Download Issues
-
-Manually download data files if automatic download fails:
-- ALAE weights: https://alaeweights.s3.us-east-2.amazonaws.com/ffhq/model_157.pth
-- Face latents: Available via Google Drive (links in `data_loader.py`)
+| Notebook | Description |
+|----------|-------------|
+| `tutorial_training_8_gaussians_to_moons.ipynb` | 2D toy problem: 8 Gaussians → moons |
+| `dm_gaussian_mixture_new.ipynb` | Drifting Model on 2D Gaussian mixtures |
+| `probmodels-flowmatching.ipynb` | Flow matching theory walkthrough |
+| `main.ipynb` | Main experimental notebook |
 
 ## References
 
-### Optimal Flow Matching (OFM)
 ```bibtex
+@article{kazanskii2026dmf,
+  title   = {Attraction, Repulsion, and Friction: Introducing DMF, a Friction-Augmented Drifting Model},
+  author  = {Kazanskii, Arkadii and Petrova, Tatiana and Bagrianskii, Konstantin and Puzikov, Aleksandr and State, Radu},
+  journal = {arXiv preprint arXiv:2604.18194},
+  year    = {2026}
+}
+
+@inproceedings{tong2024improving,
+  title     = {Improving and Generalizing Flow-Based Generative Models with Minibatch Optimal Transport},
+  author    = {Tong, Alexander and Fatras, Kilian and Malkin, Nikolay and Huguet, Guillaume and Zhang, Yanlei and Rector-Brooks, Jarrid and Wolf, Guy and Bengio, Yoshua},
+  booktitle = {Transactions on Machine Learning Research},
+  year      = {2024}
+}
+
 @inproceedings{kornilov2024optimal,
-  title={Optimal Flow Matching: Learning Straight Trajectories in Just One Step},
-  author={Kornilov, Nikita and Mokrov, Petr and Gasnikov, Alexander and Korotin, Alexander},
-  booktitle={NeurIPS},
-  year={2024}
+  title     = {Optimal Flow Matching: Learning Straight Trajectories in Just One Step},
+  author    = {Kornilov, Nikita and Mokrov, Petr and Gasnikov, Alexander and Korotin, Alexander},
+  booktitle = {NeurIPS},
+  year      = {2024}
 }
-```
 
-### Conditional Flow Matching (CFM)
-```bibtex
-@inproceedings{tong2023improving,
-  title={Improving and generalizing flow-based generative models with minibatch optimal transport},
-  author={Tong, Alexander and Malkin, Nikolay and Huguet, Guillaume and Zhang, Yanlei and Bengio, Yoshua and others},
-  booktitle={ICLR},
-  year={2024}
+@inproceedings{liu2023flow,
+  title     = {Flow Straight and Fast: Learning to Generate and Transfer Data with Rectified Flow},
+  author    = {Liu, Xingchao and Gong, Chengyue and Liu, Qiang},
+  booktitle = {ICLR},
+  year      = {2023}
 }
-```
 
-### Drifting Models (DM)
-```bibtex
 @article{lambert2025generative,
-  title={Generative Modeling via Drifting},
-  author={Lambert, Alex and others},
-  journal={arXiv preprint arXiv:2602.04770},
-  year={2025}
+  title   = {Generative Modeling via Drifting},
+  author  = {Lambert, Alex and others},
+  journal = {arXiv preprint arXiv:2602.04770},
+  year    = {2025}
 }
-```
 
-### ALAE
-```bibtex
 @inproceedings{pidhorskyi2020adversarial,
-  title={Adversarial Latent Autoencoders},
-  author={Pidhorskyi, Stanislav and Adjeroh, Donald A and Doretto, Gianfranco},
-  booktitle={CVPR},
-  year={2020}
+  title     = {Adversarial Latent Autoencoders},
+  author    = {Pidhorskyi, Stanislav and Adjeroh, Donald A and Doretto, Gianfranco},
+  booktitle = {CVPR},
+  year      = {2020}
 }
 ```
-
-## Contributing
-
-This repository is actively maintained. Contributions are welcome:
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Submit a pull request
 
 ## License
 
-This project incorporates code from multiple sources with different licenses:
-- CFM/: MIT License
-- OFM/: Check individual repository
-- DM/: Check individual repository
-
-Please refer to individual subdirectories for specific license information.
-
-## Citation
-
-If you use this codebase in your research, please cite the relevant papers above.
-
-## Contact
-
-For questions or issues, please open a GitHub issue or contact the repository maintainers.
+This repository incorporates code from multiple sources:
+- `CFM/` — MIT License (TorchCFM)
+- `OFM/`, `DM/`, `RectifiedFlow/` — see individual subdirectory licenses
+- `experiments/` — see paper license
 
 ---
 
-**Last Updated**: April 21, 2026  
-**Status**: ✅ Active Development
-
-
-## Authors
-
-**University of Luxembourg**
-- Arkadii Kazanskii
-- Tatiana Petrova
-- Konstantin Bagrianskii
-- Aleksandr Puzikov
-- Radu State
+**Last updated**: May 2026 &nbsp;|&nbsp; **Status**: Active development

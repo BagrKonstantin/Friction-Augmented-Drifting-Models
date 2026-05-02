@@ -16,6 +16,7 @@ def main():
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--num_ode_steps", type=int, default=20)
     parser.add_argument("--model", type=str, default="LatentRFUNet", choices=["LatentRFUNet", "TimeConditionedMLP"])
+    parser.add_argument("--reflow_checkpoint", type=str, default=None, help="Path to checkpoint for reflow.")
     args = parser.parse_args()
 
     seeds = [42, 123, 777]
@@ -38,6 +39,7 @@ def main():
                 lr=args.lr,
                 num_ode_steps=args.num_ode_steps,
                 model_name=args.model,
+                reflow_from_checkpoint=args.reflow_checkpoint,
                 seed=seed,
                 target_stats_path=shared_stats_dir,
             )
