@@ -28,7 +28,7 @@ except ImportError:
 DEVICE = 'cpu'
 DIM = 512
 DATA_PATH = "OFM/data"
-RUNS_DIR = "experiments/runs"
+RUNS_DIR = "Experiments_DMF/experiment_1"
 
 # ── Helper for dynamic path discovery ──────────────────────────────────
 def get_model_path(model_type, seed):
@@ -106,6 +106,7 @@ def load_ofm_model(path):
 def main():
     parser = argparse.ArgumentParser(description="Compare DM, DMF, and OFM models for a given seed.")
     parser.add_argument("--seed", type=int, default=42, help="Training seed to use (e.g., 42, 777, 123)")
+    parser.add_argument("--test_images", action="store_true", help="Use specific predefined test image indices for testing purposes")
     args = parser.parse_args()
     
     seed = args.seed
@@ -139,8 +140,13 @@ def main():
 
         print(f"Found {len(available_inds)} adult samples in test set.")
         
-        # Randomly select 5
-        selected_inds = np.random.choice(available_inds, size=5, replace=False)
+        if args.test_images:
+            selected_inds = [47, 59, 65, 119, 188, 205, 268, 281]
+            # Ensure indices are valid
+            selected_inds = [i for i in selected_inds if i < len(test_inp_images) and i < len(test_latents)]
+        else:
+            # Randomly select 5
+            selected_inds = np.random.choice(available_inds, size=5, replace=False)
         
         X_test_selected = torch.tensor(test_latents[selected_inds]).to(DEVICE)
         images_selected = test_inp_images[selected_inds]
@@ -189,30 +195,41 @@ def main():
 
     # 4. Visualization
     output_filename = f'comparison_seed_{seed}.png'
+    if args.test_images:
+        output_filename = f'comparison_seed_{seed}_test_images.png'
     print(f"Saving comparison to {output_filename}...")
     n = len(selected_inds)
-    fig, axes = plt.subplots(n, 4, figsize=(12, 3 * n), dpi=150)
+    fig, axes = plt.subplots(n, 5, figsize=(15, 3 * n), dpi=150)
     
+    # Handle the case where n=1 by ensuring axes is 2D
+    if n == 1:
+        axes = axes[np.newaxis, :]
+        
     for i in range(n):
         # Column 0: Original/Adult
         axes[i, 0].imshow(images_selected[i])
         if i == 0: axes[i, 0].set_title("Adult (Dataset)")
         axes[i, 0].axis('off')
 
-        # Column 1: DM Child
-        axes[i, 1].imshow(dm_imgs[i])
-        if i == 0: axes[i, 1].set_title("DM (Child)")
+        # Column 1: ALAE Reconstructed
+        axes[i, 1].imshow(orig_imgs[i])
+        if i == 0: axes[i, 1].set_title("ALAE Recon")
         axes[i, 1].axis('off')
 
-        # Column 2: DMF Child
-        axes[i, 2].imshow(dmf_imgs[i])
-        if i == 0: axes[i, 2].set_title("DM Friction (Child)")
+        # Column 2: DM Child
+        axes[i, 2].imshow(dm_imgs[i])
+        if i == 0: axes[i, 2].set_title("DM (Child)")
         axes[i, 2].axis('off')
 
-        # Column 3: OFM Child
-        axes[i, 3].imshow(ofm_imgs[i])
-        if i == 0: axes[i, 3].set_title("OFM (Child)")
+        # Column 3: DMF Child
+        axes[i, 3].imshow(dmf_imgs[i])
+        if i == 0: axes[i, 3].set_title("DM Friction (Child)")
         axes[i, 3].axis('off')
+
+        # Column 4: OFM Child
+        axes[i, 4].imshow(ofm_imgs[i])
+        if i == 0: axes[i, 4].set_title("OFM (Child)")
+        axes[i, 4].axis('off')
 
     plt.tight_layout()
     plt.savefig(output_filename)
