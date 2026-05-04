@@ -271,39 +271,39 @@ def main():
         axes = axes[np.newaxis, :]
 
     for i in range(n):
-        # Column 0: ALAE Reconstructed
-        axes[i, 0].imshow(orig_imgs[i])
-        if i == 0: axes[i, 0].set_title("ALAE Recon")
+        # Column 0: Original/Adult
+        axes[i, 0].imshow(images_selected[i])
+        if i == 0: axes[i, 0].set_title("Adult (Dataset)")
         axes[i, 0].axis('off')
 
-        # Column 1: Original/Adult
-        axes[i, 1].imshow(images_selected[i])
-        if i == 0: axes[i, 1].set_title("Adult (Dataset)")
+        # Column 1: ALAE Reconstructed
+        axes[i, 1].imshow(orig_imgs[i])
+        if i == 0: axes[i, 1].set_title("ALAE Reconstructed")
         axes[i, 1].axis('off')
 
         # Column 2: Rectified Flow Child
         axes[i, 2].imshow(rf_imgs[i])
-        if i == 0: axes[i, 2].set_title("Rectified Flow (Child)")
+        if i == 0: axes[i, 2].set_title("Rectified Flow")
         axes[i, 2].axis('off')
 
         # Column 3: OTCFM Child
         axes[i, 3].imshow(otcfm_imgs[i])
-        if i == 0: axes[i, 3].set_title("OT-CFM (Child)")
+        if i == 0: axes[i, 3].set_title("OT-CFM")
         axes[i, 3].axis('off')
 
         # Column 4: OFM Child
         axes[i, 4].imshow(ofm_imgs[i])
-        if i == 0: axes[i, 4].set_title("OFM (Child)")
+        if i == 0: axes[i, 4].set_title("OFM")
         axes[i, 4].axis('off')
 
         # Column 5: DM Child
         axes[i, 5].imshow(dm_imgs[i])
-        if i == 0: axes[i, 5].set_title("DM (Child)")
+        if i == 0: axes[i, 5].set_title("DM")
         axes[i, 5].axis('off')
 
         # Column 6: DM friction Child
         axes[i, 6].imshow(dmf_imgs[i])
-        if i == 0: axes[i, 6].set_title("DM Friction (Child)")
+        if i == 0: axes[i, 6].set_title("DMF (our model)")
         axes[i, 6].axis('off')
 
     plt.tight_layout()
