@@ -83,3 +83,64 @@ def load_alae_data(data_path, input_data_type, target_data_type, device, train_s
     except FileNotFoundError:
         print(f"Error: Required .npy files not found in {data_path}.")
         sys.exit(1)
+
+
+def get_indices_older_then_18(data_type, age_arr, gen_arr, size):
+    is_adult = (age_arr >= 18).reshape(-1) & (age_arr != -1).reshape(-1)
+
+    if data_type == "MAN":
+        return np.arange(size)[(gen_arr == "male").reshape(-1) & is_adult]
+
+    elif data_type == "WOMAN":
+        return np.arange(size)[(gen_arr == "female").reshape(-1) & is_adult]
+
+    elif data_type == "ADULT":
+        return np.arange(size)[is_adult]
+
+    elif data_type == "CHILDREN":
+        return np.arange(size)[(age_arr < 18).reshape(-1) & (age_arr != -1).reshape(-1)]
+
+    return np.arange(size)
+
+
+def load_gender_transfer_data(data_path, input_data_type, target_data_type, device, train_size=60000, test_size=10000):
+    """
+    Loads and splits ALAE latents specifically for MAN -> WOMAN training.
+    """
+    try:
+        latents = np.load(os.path.join(data_path, "latents.npy"))
+        gender = np.load(os.path.join(data_path, "gender.npy"))
+        age = np.load(os.path.join(data_path, "age.npy"))
+        test_inp_images = np.load(os.path.join(data_path, "test_images.npy"))
+
+        train_latents, test_latents = latents[:train_size], latents[train_size:]
+        train_gender, test_gender = gender[:train_size], gender[train_size:]
+        train_age, test_age = age[:train_size], age[train_size:]
+
+        # TODO Decide on get_indices_older_then_18 or get_indices
+        x_inds_train = get_indices_older_then_18(input_data_type, train_age, train_gender, train_size)
+        y_inds_train = get_indices_older_then_18(target_data_type, train_age, train_gender, train_size)
+
+        x_inds_test = get_indices_older_then_18(input_data_type, test_age, test_gender, test_size)
+        y_inds_test = get_indices_older_then_18(target_data_type, test_age, test_gender, test_size)
+
+        X_train = torch.tensor(train_latents[x_inds_train])
+        Y_train = torch.tensor(train_latents[y_inds_train])
+
+        X_test = torch.tensor(test_latents[x_inds_test])
+        Y_test = torch.tensor(test_latents[y_inds_test])
+
+        X_sampler = TensorSampler(X_train, device=device)
+        Y_sampler = TensorSampler(Y_train, device=device)
+
+        return {
+            "X_train": X_train, "Y_train": Y_train,
+            "X_test": X_test, "Y_test": Y_test,
+            "X_sampler": X_sampler, "Y_sampler": Y_sampler,
+            "x_inds_test": x_inds_test,
+            "test_inp_images": test_inp_images
+        }
+
+    except FileNotFoundError as e:
+        print(f"Error: Required files not found. {e}")
+        sys.exit(1)
