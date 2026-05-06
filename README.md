@@ -11,8 +11,8 @@ A research codebase for **image-to-image translation in ALAE latent space**, com
 
 | Method | Description | Training | Inference | OT coupling |
 |--------|-------------|----------|-----------|-------------|
-| **DMF** | Drifting Model with Friction — our proposed method | Medium | Fast | — |
-| **DM** | Baseline Drifting Model (Lambert et al., 2025) | Medium | Fast | — |
+| **DMF** | Drifting Model with Friction — our proposed method | Low | Fast | — |
+| **DM** | Baseline Drifting Model (Lambert et al., 2025) | Low | Fast | — |
 | **OFM** | Optimal Flow Matching via ICNN (Kornilov et al., 2024) | High | 1-step | ✅ Global |
 | **OT-CFM** | Conditional Flow Matching with mini-batch OT (Tong et al., 2024) | Medium | ODE | ✅ Mini-batch |
 | **RF** | Rectified Flow with optional reflow (Liu et al., 2023) | Medium | ODE / 1-step | — |
