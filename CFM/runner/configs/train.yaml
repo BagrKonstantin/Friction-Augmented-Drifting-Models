@@ -31,7 +31,7 @@ defaults:
 # task name, determines output directory path
 task_name: "train"
 
-# tags to help you identify your experiments
+# tags to help you identify your scripts
 # you can overwrite this in experiment configs
 # overwrite from command line with `python train.py tags="[first_tag, second_tag]"`
 # appending lists from command line is currently not supported :(

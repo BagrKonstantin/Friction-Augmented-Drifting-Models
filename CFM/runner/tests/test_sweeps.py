@@ -11,7 +11,7 @@ dir_overrides = ["paths.data_dir", "hydra.sweep.dir"]
 @RunIf(sh=True)
 @pytest.mark.slow
 @pytest.mark.xfail(
-    reason="Currently failing experiments with fast_dev_run which messes with gradients"
+    reason="Currently failing scripts with fast_dev_run which messes with gradients"
 )
 def test_xfail_fast_dev_experiments(tmp_path):
     """Test running all available experiment configs with fast_dev_run=True."""

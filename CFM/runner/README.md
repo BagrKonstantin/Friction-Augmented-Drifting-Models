@@ -267,7 +267,7 @@ python eval.py ckpt_path="/path/to/ckpt/name.ckpt"
 <summary><b>Create a sweep over hyperparameters</b></summary>
 
 ```bash
-# this will run 6 experiments one after the other,
+# this will run 6 scripts one after the other,
 # each with different combination of batch_size and learning rate
 python train.py -m datamodule.batch_size=32,64,128 model.lr=0.001,0.0005
 ```

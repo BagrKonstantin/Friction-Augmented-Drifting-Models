@@ -69,35 +69,35 @@ All scripts are run from the repository root. Each creates a timestamped directo
 
 ```bash
 # Drifting Model with Friction (DMF — ours)
-python experiments/dmf_alae.py --max_steps 10000 --seed 42
+python scripts/dmf_alae.py --max_steps 10000 --seed 42
 
 # Drifting Model (baseline)
-python experiments/dm_alae.py --max_steps 10000 --seed 42
+python scripts/dm_alae.py --max_steps 10000 --seed 42
 
 # Optimal Flow Matching
-python experiments/ofm_alae.py --max_steps 10000 --seed 42
+python scripts/ofm_alae.py --max_steps 10000 --seed 42
 
 # OT-CFM
-python experiments/otcfm/otcfm_alae.py --max_steps 10000 --seed 42
+python scripts/otcfm/otcfm_alae.py --max_steps 10000 --seed 42
 
 # Rectified Flow (1-RF)
-python experiments/rectified_flow/rectified_flow_alae.py --max_steps 10000 --seed 42
+python scripts/rectified_flow/rectified_flow_alae.py --max_steps 10000 --seed 42
 
 # Rectified Flow (2-RF — reflow pass)
-python experiments/rectified_flow/rectified_flow_alae.py --max_steps 10000 --seed 42 --reflow
+python scripts/rectified_flow/rectified_flow_alae.py --max_steps 10000 --seed 42 --reflow
 ```
 
 ### Multi-seed batch runs
 
 ```bash
 # DM + DMF across seeds [42, 123, 777, 1234, 2024]
-python experiments/run_multiple_seeds.py --max_steps 30000
+python scripts/run_multiple_seeds.py --max_steps 30000
 
 # OT-CFM across multiple seeds
-python experiments/otcfm/run_multiple_seeds_otcfm.py --max_steps 30000
+python scripts/otcfm/run_multiple_seeds_otcfm.py --max_steps 30000
 
 # Rectified Flow across multiple seeds
-python experiments/rectified_flow/run_multiple_seeds_rf.py --max_steps 30000
+python scripts/rectified_flow/run_multiple_seeds_rf.py --max_steps 30000
 ```
 
 ### Face attribute tasks
@@ -105,8 +105,8 @@ python experiments/rectified_flow/run_multiple_seeds_rf.py --max_steps 30000
 Use `--input_data` / `--target_data` to select a translation task:
 
 ```bash
-python experiments/dmf_alae.py --input_data ADULT --target_data CHILDREN --seed 42
-python experiments/dmf_alae.py --input_data MAN   --target_data WOMAN    --seed 42
+python scripts/dmf_alae.py --input_data ADULT --target_data CHILDREN --seed 42
+python scripts/dmf_alae.py --input_data MAN   --target_data WOMAN    --seed 42
 ```
 
 Supported values: `ADULT`, `CHILDREN`, `MAN`, `WOMAN`.
@@ -114,8 +114,8 @@ Supported values: `ADULT`, `CHILDREN`, `MAN`, `WOMAN`.
 ### Inference on custom images
 
 ```bash
-python experiments/otcfm/otcfm_inference.py       --checkpoint experiments/runs/<run_dir>/checkpoint_final.pth
-python experiments/rectified_flow/rectified_flow_inference.py --checkpoint experiments/runs/<run_dir>/checkpoint_final.pth
+python scripts/otcfm/otcfm_inference.py       --checkpoint scripts/runs/<run_dir>/checkpoint_final.pth
+python scripts/rectified_flow/rectified_flow_inference.py --checkpoint scripts/runs/<run_dir>/checkpoint_final.pth
 ```
 
 ## Command-Line Arguments
