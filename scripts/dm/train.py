@@ -14,7 +14,7 @@ if root_dir not in sys.path:
 from scripts.exp_utils.exp_utils import seed_all, get_device, setup_paths, get_run_dir, save_config, save_metrics
 setup_paths()
 
-from scripts.exp_utils.data_loader import download_data, download_alae_model, load_alae_data, load_gender_transfer_data
+from scripts.exp_utils.data_loader import download_data, download_alae_model, load_alae_data, load_gender_transfer_data, load_imagenet_frogs_data
 from scripts.exp_utils.eval_metrics import MetricsEvaluator
 from scripts.dmf_gamma.models_and_losses import MLP, drift_loss_pytorch
 from scripts.visualization import save_comparison_plot
@@ -58,16 +58,20 @@ def train(
 
     # ── Data Loading ──────────────────────────────────────────────────────
     DATA_PATH = os.path.join(setup_paths(), "data")
-    try:
-        download_data(DATA_PATH)
-        download_alae_model()
-    except Exception as e:
-        print(f"Download failed: {e}")
+    if data_loader != "imagenet":
+        try:
+            download_data(DATA_PATH)
+            download_alae_model()
+        except Exception as e:
+            print(f"Download failed: {e}")
 
     if data_loader == "alae":
         data = load_alae_data(DATA_PATH, input_data, target_data, device)
     elif data_loader == "gender":
         data = load_gender_transfer_data(DATA_PATH, input_data, target_data, device)
+    elif data_loader == "imagenet":
+        # we will default to 32x32 ImageNet resize just for 1D MLP testing purposes
+        data = load_imagenet_frogs_data(device, image_size=32)
     else:
         raise ValueError(f"Unknown data_loader: {data_loader}")
 
@@ -79,20 +83,23 @@ def train(
     test_inp_images = data["test_inp_images"]
 
     # ── Model Initialisation ──────────────────────────────────────────────
-    DIM = 512
+    if data_loader == "imagenet":
+        DIM = 3 * 32 * 32  # 3072
+    else:
+        DIM = 512
     model = MLP(dim=DIM, dimh=1024, num_hidden_layers=3).to(device)
     optim = torch.optim.Adam(model.parameters(), lr=lr)
     ema = EMA(0, betas=[0.999, 0.99])
 
     # ── Eval Metrics Setup ───────────────────────────────────────────────
-    evaluator = MetricsEvaluator(device, compute_metrics=compute_metrics)
+    evaluator = MetricsEvaluator(device, compute_metrics=compute_metrics, use_alae=(data_loader != "imagenet"))
 
     mu_target, sigma_target = None, None
     target_cmmd_act = None
 
     if compute_metrics:
         print(f"Precomputing FID & CMMD stats for {target_data} on the entire test set...")
-        target_fid_act, target_cmmd_act = evaluator.get_eval_features(Y_test)
+        target_fid_act, target_cmmd_act = evaluator.get_eval_features(Y_test, is_image=(data_loader == "imagenet"))
         mu_target, sigma_target = evaluator.get_stats(target_fid_act)
         print(f"Target stats computed on {len(target_fid_act)} samples.")
 
@@ -141,7 +148,7 @@ def train(
         model.eval()
         with torch.no_grad():
             mapped_test = model(X_test.to(device))
-            gen_fid_act, gen_cmmd_act = evaluator.get_eval_features(mapped_test)
+            gen_fid_act, gen_cmmd_act = evaluator.get_eval_features(mapped_test, is_image=(data_loader == "imagenet"))
 
             mu_gen, sigma_gen = evaluator.get_stats(gen_fid_act)
             fid_score = evaluator.calculate_fid(mu_gen, sigma_gen, mu_target, sigma_target)
@@ -159,9 +166,20 @@ def train(
     save_metrics(final_metrics, output_path)
 
     # ── Results Visualization ──────────────────────────────────────────────
-    if evaluator.alae_model:
+    if evaluator.alae_model and data_loader != "imagenet":
         plot_name = f'{method_name}_transfer_faces.png'
         save_comparison_plot(model, X_test, x_inds_test, test_inp_images, evaluator.alae_model, device, os.path.join(output_path, plot_name), "DM Mapped")
+    elif data_loader == "imagenet":
+        # Basic ImageNet image saving
+        import torchvision.utils as vutils
+        model.eval()
+        with torch.no_grad():
+            gen_flat = model(X_test[:16].to(device))
+            gen_imgs = gen_flat.view(-1, 3, 32, 32).cpu()
+            gen_imgs = (gen_imgs * 0.5) + 0.5 # unnormalize
+        plot_name = f'{method_name}_imagenet_frogs.png'
+        vutils.save_image(gen_imgs, os.path.join(output_path, plot_name), nrow=4)
+        print(f"Saved ImageNet generations to {plot_name}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -171,7 +189,7 @@ if __name__ == "__main__":
     parser.add_argument("--lr", type=float, default=5e-4)
     parser.add_argument("--output_path", type=str, default=None)
     parser.add_argument("--method_name", type=str, default="dm")
-    parser.add_argument("--data_loader", type=str, default="alae", choices=["alae", "gender"])
+    parser.add_argument("--data_loader", type=str, default="alae", choices=["alae", "gender", "imagenet"])
     parser.add_argument("--input_data", type=str, default="ADULT")
     parser.add_argument("--target_data", type=str, default="CHILDREN")
     parser.add_argument("--seed", type=int, default=0xBADBEEF)

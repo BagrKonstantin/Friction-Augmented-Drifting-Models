@@ -144,3 +144,55 @@ def load_gender_transfer_data(data_path, input_data_type, target_data_type, devi
     except FileNotFoundError as e:
         print(f"Error: Required files not found. {e}")
         sys.exit(1)
+
+def load_imagenet_frogs_data(device, image_size=32, num_samples=1000):
+    import torchvision.transforms as transforms
+    import torchvision.datasets as datasets
+    from torch.utils.data import DataLoader
+
+    transform = transforms.Compose([
+        transforms.Resize((image_size, image_size)),
+        transforms.ToTensor(),
+        transforms.Normalize([0.5]*3, [0.5]*3)
+    ])
+
+    try:
+        # For testing purposes, we use FakeData to simulate training
+        dataset = datasets.FakeData(size=num_samples, image_size=(3, image_size, image_size), 
+                                    num_classes=1000, transform=transform)
+        print("Warning: Currently using FakeData to simulate ImageNet frogs in test mode!")
+    except Exception as e:
+        print(f"Failed to load specific dataset: {e}")
+        sys.exit(1)
+
+    # Flatten images to 1D vectors for MLP
+    images = []
+    loader = DataLoader(dataset, batch_size=500, shuffle=False)
+    for batch_images, _ in loader:
+        images.append(batch_images.view(batch_images.size(0), -1))
+    
+    all_images = torch.cat(images, dim=0)
+
+    # Since there are no pair labels for unconditional generation, X = noise, Y = image
+    # For actual drift training:
+    X_train = torch.randn_like(all_images)
+    Y_train = all_images
+
+    # Subsample test set
+    test_size = min(len(all_images) // 5, 200)
+    X_test = torch.randn_like(all_images[:test_size])
+    Y_test = all_images[:test_size]
+
+    X_sampler = TensorSampler(X_train, device=device)
+    Y_sampler = TensorSampler(Y_train, device=device)
+
+    # test_inp_images can just be a subset of images reshape to (N, 3, H, W)
+    test_inp_images = Y_test.view(-1, 3, image_size, image_size).cpu().numpy()
+
+    return {
+        "X_train": X_train, "Y_train": Y_train,
+        "X_test": X_test, "Y_test": Y_test,
+        "X_sampler": X_sampler, "Y_sampler": Y_sampler,
+        "x_inds_test": np.arange(test_size),
+        "test_inp_images": test_inp_images
+    }

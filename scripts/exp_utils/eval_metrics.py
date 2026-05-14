@@ -12,9 +12,10 @@ from OFM.ofmsrc.fid_score import calculate_frechet_distance
 from OFM.ALAE.alae_ffhq_inference import load_model, decode
 
 class MetricsEvaluator:
-    def __init__(self, device, compute_metrics=True):
+    def __init__(self, device, compute_metrics=True, use_alae=True):
         self.device = device
         self.compute_metrics = compute_metrics
+        self.use_alae = use_alae
         self.alae_model = None
         self.inception_model = None
         self.clip_model = None
@@ -24,8 +25,9 @@ class MetricsEvaluator:
 
     def _setup_models(self):
         print("Setting up Evaluation models (FID & CMMD)...")
-        self.alae_model = load_model("./OFM/ALAE/configs/ffhq.yaml",
-                                    training_artifacts_dir="data/alae_training_artifacts/ffhq/").to(self.device)
+        if self.use_alae:
+            self.alae_model = load_model("./OFM/ALAE/configs/ffhq.yaml",
+                                        training_artifacts_dir="data/alae_training_artifacts/ffhq/").to(self.device)
         self.inception_model = InceptionV3([3]).to(self.device)
         self.inception_model.eval()
 
@@ -44,7 +46,7 @@ class MetricsEvaluator:
             print("Warning: cmmd_pytorch not found. CMMD evaluation will be disabled.")
             self.clip_model = None
 
-    def get_eval_features(self, latents, batch_size=32):
+    def get_eval_features(self, latents, batch_size=32, is_image=False):
         if not self.compute_metrics:
             return None, None
             
@@ -54,8 +56,15 @@ class MetricsEvaluator:
             for i in tqdm(range(0, len(latents), batch_size), desc="Extracting features"):
                 batch = latents[i:i+batch_size].to(self.device)
 
-                # ALAE Decode (to [-1, 1])
-                imgs = decode(self.alae_model, batch)
+                if is_image:
+                    B, flat_size = batch.shape
+                    C = 3
+                    H = int((flat_size // C) ** 0.5)
+                    W = H
+                    imgs = batch.view(B, C, H, W)
+                else:
+                    # ALAE Decode (to [-1, 1])
+                    imgs = decode(self.alae_model, batch)
                 # Normalize to [0, 1]
                 imgs_01 = (imgs * 0.5 + 0.5).clamp(0, 1)
 
