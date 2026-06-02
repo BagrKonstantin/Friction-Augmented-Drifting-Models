@@ -32,7 +32,7 @@ class MetricsEvaluator:
         self.inception_model.eval()
 
         # CMMD setup
-        root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         cmmd_src = os.path.join(root_dir, "cmmd_pytorch", "src")
         if cmmd_src not in sys.path:
             sys.path.append(cmmd_src)
