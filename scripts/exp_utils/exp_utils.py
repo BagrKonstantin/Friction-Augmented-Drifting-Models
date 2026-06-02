@@ -39,7 +39,7 @@ def get_run_dir(method_name, seed):
     from datetime import datetime
     timestamp = datetime.now().strftime("%d-%m-%Y-%H-%M")
     run_name = f"{timestamp}_{method_name}_{seed}"
-    run_dir = os.path.join("scripts", "runs", run_name)
+    run_dir = os.path.join("experiments", run_name)
     os.makedirs(run_dir, exist_ok=True)
     return run_dir
 
