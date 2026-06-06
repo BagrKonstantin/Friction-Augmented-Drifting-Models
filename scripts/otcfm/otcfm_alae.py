@@ -29,7 +29,7 @@ from scripts.visualization import save_comparison_plot
 
 from OFM.ofmsrc.tools import EMA
 
-from scripts.rectified_flow.rectified_flow_alae import LatentRFUNet, TimeConditionedMLP
+from scripts.rectified_flow.run_rectified_flow_alae import LatentRFUNet, TimeConditionedMLP
 
 
 class OTCFMMLP(nn.Module):

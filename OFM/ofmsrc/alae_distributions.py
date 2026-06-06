@@ -54,11 +54,16 @@ class TensorSampler(Sampler):
         self.tensor = torch.clone(tensor).to(device)
         
     def sample(self, size=5):
-        assert size <= self.tensor.shape[0]
+        assert size <= self.tensor.shape[0], f"Requested sample size exceeds tensor size, {size} > {self.tensor.shape[0]}" 
         
         ind = torch.randperm(self.tensor.shape[0], device=self.device)[:size]
         return self.tensor[ind].clone()
-
+    
+    def __getitem__(self, key) -> torch.Tensor:
+        return self.tensor[key].clone()
+    
+    def __len__(self):
+        return self.tensor.shape[0]
 
 class SwissRollSampler(Sampler):
     def __init__(

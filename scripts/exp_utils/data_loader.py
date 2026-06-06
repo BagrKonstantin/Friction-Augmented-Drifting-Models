@@ -48,35 +48,44 @@ def get_indices(data_type, age_arr, gen_arr, size):
         return np.arange(size)[(age_arr < 18).reshape(-1) * (age_arr != -1).reshape(-1)]
     return np.arange(size)
 
-def load_alae_data(data_path, input_data_type, target_data_type, device, train_size=60000, test_size=10000):
+def load_alae_data(data_path, input_data_type, target_data_type, device, train_size=55000, valid_size=5000, test_size=10000):
     try:
         latents = np.load(os.path.join(data_path, "latents.npy"))
         gender = np.load(os.path.join(data_path, "gender.npy"))
         age = np.load(os.path.join(data_path, "age.npy"))
         test_inp_images = np.load(os.path.join(data_path, "test_images.npy"))
 
-        train_latents, test_latents = latents[:train_size], latents[train_size:]
-        train_gender, test_gender = gender[:train_size], gender[train_size:]
-        train_age, test_age = age[:train_size], age[train_size:]
+        train_latents,valid_latents,  test_latents = latents[:train_size], latents[train_size:train_size+valid_size], latents[train_size+valid_size:]
+        train_gender, valid_gender, test_gender = gender[:train_size], gender[train_size:train_size+valid_size], gender[train_size+valid_size:]
+        train_age, valid_age, test_age = age[:train_size], age[train_size:train_size+valid_size], age[train_size+valid_size:]
 
         x_inds_train = get_indices(input_data_type, train_age, train_gender, train_size)
+        x_inds_valid = get_indices(input_data_type, valid_age, valid_gender, valid_size)
         x_inds_test = get_indices(input_data_type, test_age, test_gender, test_size)
+        
         y_inds_train = get_indices(target_data_type, train_age, train_gender, train_size)
+        y_inds_valid = get_indices(target_data_type, valid_age, valid_gender, valid_size)
         y_inds_test = get_indices(target_data_type, test_age, test_gender, test_size)
 
         X_train = torch.tensor(train_latents[x_inds_train])
         Y_train = torch.tensor(train_latents[y_inds_train])
+        X_valid = torch.tensor(valid_latents[x_inds_valid])
+        Y_valid = torch.tensor(valid_latents[y_inds_valid])
 
         X_test = torch.tensor(test_latents[x_inds_test])
         Y_test = torch.tensor(test_latents[y_inds_test])
 
         X_sampler = TensorSampler(X_train, device=device)
         Y_sampler = TensorSampler(Y_train, device=device)
+        X_valid_sampler = TensorSampler(X_valid, device=device)
+        Y_valid_sampler = TensorSampler(Y_valid, device=device)
         
         return {
             "X_train": X_train, "Y_train": Y_train,
+            "X_valid": X_valid, "Y_valid": Y_valid,
             "X_test": X_test, "Y_test": Y_test,
             "X_sampler": X_sampler, "Y_sampler": Y_sampler,
+            "X_valid_sampler": X_valid_sampler, "Y_valid_sampler": Y_valid_sampler,
             "x_inds_test": x_inds_test,
             "test_inp_images": test_inp_images
         }

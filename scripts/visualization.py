@@ -1,9 +1,12 @@
+from typing import Callable, Union
+
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
 from OFM.ALAE.alae_ffhq_inference import decode
+from OFM.ALAE.model import Model
 
-def save_comparison_plot(model, x_test, x_inds_test, test_inp_images, alae_model, device, save_path, title_prefix="Mapped"):
+def save_comparison_plot(model: Union[torch.nn.Module, Callable], x_test, x_inds_test, test_inp_images, alae_model: Model, device, save_path, title_prefix="Mapped") -> str:
     # model can be MLP or DenseICNN. DenseICNN has push_nograd, MLP just forward.
     is_icnn = hasattr(model, 'push_nograd')
     
@@ -24,14 +27,12 @@ def save_comparison_plot(model, x_test, x_inds_test, test_inp_images, alae_model
             mapped = model(latent_to_map)
             
     with torch.no_grad():
-        decoded_input = decode(alae_model, latent_to_map)
-        decoded_input = ((decoded_input * 0.5 + 0.5) * 255).clamp(0, 255).cpu().type(torch.uint8).permute(0, 2, 3, 1).numpy()
+        decoded_input = decode_latent_to_image(alae_model, latent_to_map)
 
-        decoded_output = decode(alae_model, mapped)
-        decoded_output = ((decoded_output * 0.5 + 0.5) * 255).clamp(0, 255).cpu().type(torch.uint8).permute(0, 2, 3, 1).numpy()
+        decoded_output = decode_latent_to_image(alae_model, mapped)
 
     num_samples = len(inds_to_map)
-    fig, axes = plt.subplots(num_samples, 2, figsize=(6, 3 * num_samples), dpi=150)
+    _, axes = plt.subplots(num_samples, 2, figsize=(6, 3 * num_samples), dpi=150)
     if num_samples == 1:
         axes = axes[None, :]
         
@@ -47,3 +48,9 @@ def save_comparison_plot(model, x_test, x_inds_test, test_inp_images, alae_model
     plt.tight_layout()
     plt.savefig(save_path)
     print(f"Comparison saved to {save_path}")
+    return save_path
+
+def decode_latent_to_image(alae_model: Model, latents : torch.Tensor) -> np.ndarray:
+    decoded_input = decode(alae_model, latents)
+    decoded_input = ((decoded_input * 0.5 + 0.5) * 255).clamp(0, 255).cpu().type(torch.uint8).permute(0, 2, 3, 1).numpy()
+    return decoded_input

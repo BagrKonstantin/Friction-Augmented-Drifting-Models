@@ -1,11 +1,163 @@
+from typing import Tuple
+
 import numpy as np
 import torch 
  
 import torch.nn as nn
 import string
 import torch.nn.functional as F
-
+from tqdm import tqdm
 import scripts.rectified_flow.simple_updown_sampling as up_or_down_sampling
+
+import torch.nn as nn
+import torch
+
+
+class LatentRFUNet(nn.Module):
+    """Wraps RFUNet to operate on flat latent vectors [B, latent_dim]."""
+
+    def __init__(self, latent_dim=512, spatial_ch=2, spatial_size=16):
+        super().__init__()
+        assert spatial_ch * spatial_size * spatial_size == latent_dim, \
+            f"spatial_ch * spatial_size^2 must equal latent_dim ({latent_dim})"
+        self.spatial_ch = spatial_ch
+        self.spatial_size = spatial_size
+        self.net = RFUNet(in_channels=spatial_ch)
+
+    def forward(self, z, t):
+        B = z.shape[0]
+        if t.dim() == 2:
+            t = t.squeeze(1)                    # [B]
+        t_scaled = (t * 999).long()             # float [0,1] → int [0,999]
+        x = z.view(B, self.spatial_ch, self.spatial_size, self.spatial_size)
+        out = self.net(x, t_scaled)
+        return out.view(B, -1)
+
+
+class TimeConditionedMLP(nn.Module):
+    """
+    Time-conditioned MLP for Rectified Flow velocity field v(z, t).
+    Architecture from Rectified Flow paper for latent space transformation.
+    
+    Input: z (latent) concatenated with t (time)
+    Output: velocity field v(z,t) with same dimension as z
+    """
+    def __init__(self, dim=512, hidden_dim=1024, num_layers=3, activation='tanh'):
+        super().__init__()
+        self.dim = dim
+        
+        layers = []
+        # First layer: (dim + 1) -> hidden_dim (the +1 is for time t)
+        layers.append(nn.Linear(dim + 1, hidden_dim))
+        
+        if activation == 'tanh':
+            act_fn = nn.Tanh
+        elif activation == 'relu':
+            act_fn = nn.ReLU
+        else:
+            raise ValueError(f"Unknown activation: {activation}")
+        
+        layers.append(act_fn())
+        
+        # Hidden layers
+        for _ in range(num_layers - 2):
+            layers.append(nn.Linear(hidden_dim, hidden_dim))
+            layers.append(act_fn())
+        
+        # Output layer: hidden_dim -> dim
+        layers.append(nn.Linear(hidden_dim, dim))
+        
+        self.net = nn.Sequential(*layers)
+    
+    def forward(self, z, t):
+        """
+        Args:
+            z: [batch_size, dim] - latent vectors
+            t: [batch_size, 1] or [batch_size] - time values in [0, 1]
+        Returns:
+            velocity: [batch_size, dim] - velocity field v(z,t)
+        """
+        if t.dim() == 1:
+            t = t.unsqueeze(1)  # [batch_size, 1]
+        
+        # Concatenate z and t
+        zt = torch.cat([z, t], dim=1)  # [batch_size, dim + 1]
+        
+        # Predict velocity
+        velocity = self.net(zt)
+        
+        return velocity
+
+
+class RectifiedFlow:
+    """
+    Rectified Flow model for learning optimal transport between two distributions.
+    
+    The key idea: learn velocity field v(z,t) such that solving ODE:
+        dZ/dt = v(Z_t, t)
+    transports samples from π₀ to π₁.
+    """
+    def __init__(self, model, device='cuda'):
+        self.model = model
+        self.device = device
+    
+    def get_train_tuple(self, z0: torch.tensor, z1: torch.tensor) -> Tuple[torch.tensor, torch.tensor, torch.tensor]:
+        """
+        Generate training data for rectified flow.
+        
+        Sample random time t ∈ [0,1], compute:
+        - z_t = t·z1 + (1-t)·z0  (linear interpolation)
+        - target = z1 - z0  (velocity of straight line)
+        
+        Args:
+            z0: [batch_size, dim] - source samples
+            z1: [batch_size, dim] - target samples
+        Returns:
+            z_t: [batch_size, dim] - interpolated samples
+            t: [batch_size, 1] - random times
+            target: [batch_size, dim] - target velocity
+        """
+        batch_size = z0.shape[0]
+        
+        # Sample random time t ∈ [0, 1]
+        t = torch.rand((batch_size, 1), device=z0.device)
+        
+        # Linear interpolation: z_t = t·z1 + (1-t)·z0
+        z_t = t * z1 + (1 - t) * z0
+        
+        # Target velocity (constant along straight line)
+        target = z1 - z0
+        
+        return z_t, t, target
+    
+    @torch.no_grad()
+    def sample_ode(self, z0, num_steps=100, mute_tqdm=False):
+        """
+        Sample from the learned flow using Euler method.
+        
+        Solve ODE: dZ/dt = v(Z_t, t) from t=0 to t=1
+        
+        Args:
+            z0: [batch_size, dim] - initial samples from π₀
+            num_steps: number of discretization steps
+        Returns:
+            z1: [batch_size, dim] - transported samples ≈ samples from π₁
+        """
+        batch_size = z0.shape[0]
+        dt = 1.0 / num_steps
+        
+        z = z0.clone()
+        
+        for step in tqdm(range(num_steps), desc="Sampling ODE", disable=mute_tqdm):
+            t = torch.ones((batch_size, 1), device=z.device) * (step / num_steps)
+            
+            # Predict velocity
+            velocity = self.model(z, t)
+            
+            # Euler step
+            z = z + velocity * dt
+        
+        return z
 
 
 def get_timestep_embedding(timesteps, embedding_dim, max_positions=10000):

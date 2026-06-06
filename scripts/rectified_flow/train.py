@@ -1,186 +1,23 @@
-#!/usr/bin/env python
-"""
-Rectified Flow implementation for ALAE Adult/Children transformation
-Based on: Flow Straight and Fast: Learning to Generate and Transfer Data with Rectified Flow
-Paper: https://arxiv.org/abs/2209.03003
 
-Supports both 1-RF and 2-RF (reflow):
-  
-  1-RF: Train on random pairs (X₀, X₁) from source and target distributions
-        python rectified_flow_alae.py --max_steps 10000
-  
-  2-RF: Generate paired data from 1-RF, then train on straighter trajectories
-        # First train 1-RF
-        python rectified_flow_alae.py --max_steps 10000 --output_path ./1_rf
-        # Then reflow for 2-RF
-        python rectified_flow_alae.py --max_steps 10000 --reflow_from_checkpoint ./1_rf/checkpoint_final.pth --output_path ./2_rf
-"""
 import os
-import torch
-import torch.nn as nn
-import argparse
+import numpy as np
 import time
+import pathlib
+import torch
+from scripts.rectified_flow.rf_model import RectifiedFlow, LatentRFUNet, TimeConditionedMLP
 from tqdm import tqdm
 import torch.nn.functional as F
-
-from scripts.exp_utils.exp_utils import seed_all, get_device, setup_paths, get_run_dir, save_config, save_metrics, load_or_compute_target_stats
-setup_paths()
+from torch.utils.tensorboard import SummaryWriter
+from PIL import Image
 
 from scripts.exp_utils.data_loader import download_data, download_alae_model, load_alae_data
 from scripts.exp_utils.eval_metrics import MetricsEvaluator
-from scripts.visualization import save_comparison_plot
+from scripts.visualization import save_comparison_plot, decode_latent_to_image
 
+from scripts.exp_utils.exp_utils import seed_all, get_device, setup_paths, get_run_dir, save_config, save_metrics, load_or_compute_target_stats
 # OFM Specific Imports
 from OFM.ofmsrc.tools import EMA
 from OFM.ofmsrc.alae_distributions import TensorSampler
-
-from scripts.rectified_flow.rectified_flow_model import RFUNet
-
-
-class LatentRFUNet(nn.Module):
-    """Wraps RFUNet to operate on flat latent vectors [B, latent_dim]."""
-
-    def __init__(self, latent_dim=512, spatial_ch=2, spatial_size=16):
-        super().__init__()
-        assert spatial_ch * spatial_size * spatial_size == latent_dim, \
-            f"spatial_ch * spatial_size^2 must equal latent_dim ({latent_dim})"
-        self.spatial_ch = spatial_ch
-        self.spatial_size = spatial_size
-        self.net = RFUNet(in_channels=spatial_ch)
-
-    def forward(self, z, t):
-        B = z.shape[0]
-        if t.dim() == 2:
-            t = t.squeeze(1)                    # [B]
-        t_scaled = (t * 999).long()             # float [0,1] → int [0,999]
-        x = z.view(B, self.spatial_ch, self.spatial_size, self.spatial_size)
-        out = self.net(x, t_scaled)
-        return out.view(B, -1)
-
-
-class TimeConditionedMLP(nn.Module):
-    """
-    Time-conditioned MLP for Rectified Flow velocity field v(z, t).
-    Architecture from Rectified Flow paper for latent space transformation.
-    
-    Input: z (latent) concatenated with t (time)
-    Output: velocity field v(z,t) with same dimension as z
-    """
-    def __init__(self, dim=512, hidden_dim=1024, num_layers=3, activation='tanh'):
-        super().__init__()
-        self.dim = dim
-        
-        layers = []
-        # First layer: (dim + 1) -> hidden_dim (the +1 is for time t)
-        layers.append(nn.Linear(dim + 1, hidden_dim))
-        
-        if activation == 'tanh':
-            act_fn = nn.Tanh
-        elif activation == 'relu':
-            act_fn = nn.ReLU
-        else:
-            raise ValueError(f"Unknown activation: {activation}")
-        
-        layers.append(act_fn())
-        
-        # Hidden layers
-        for _ in range(num_layers - 2):
-            layers.append(nn.Linear(hidden_dim, hidden_dim))
-            layers.append(act_fn())
-        
-        # Output layer: hidden_dim -> dim
-        layers.append(nn.Linear(hidden_dim, dim))
-        
-        self.net = nn.Sequential(*layers)
-    
-    def forward(self, z, t):
-        """
-        Args:
-            z: [batch_size, dim] - latent vectors
-            t: [batch_size, 1] or [batch_size] - time values in [0, 1]
-        Returns:
-            velocity: [batch_size, dim] - velocity field v(z,t)
-        """
-        if t.dim() == 1:
-            t = t.unsqueeze(1)  # [batch_size, 1]
-        
-        # Concatenate z and t
-        zt = torch.cat([z, t], dim=1)  # [batch_size, dim + 1]
-        
-        # Predict velocity
-        velocity = self.net(zt)
-        
-        return velocity
-
-class RectifiedFlow:
-    """
-    Rectified Flow model for learning optimal transport between two distributions.
-    
-    The key idea: learn velocity field v(z,t) such that solving ODE:
-        dZ/dt = v(Z_t, t)
-    transports samples from π₀ to π₁.
-    """
-    def __init__(self, model, device='cuda'):
-        self.model = model
-        self.device = device
-    
-    def get_train_tuple(self, z0, z1):
-        """
-        Generate training data for rectified flow.
-        
-        Sample random time t ∈ [0,1], compute:
-        - z_t = t·z1 + (1-t)·z0  (linear interpolation)
-        - target = z1 - z0  (velocity of straight line)
-        
-        Args:
-            z0: [batch_size, dim] - source samples
-            z1: [batch_size, dim] - target samples
-        Returns:
-            z_t: [batch_size, dim] - interpolated samples
-            t: [batch_size, 1] - random times
-            target: [batch_size, dim] - target velocity
-        """
-        batch_size = z0.shape[0]
-        
-        # Sample random time t ∈ [0, 1]
-        t = torch.rand((batch_size, 1), device=z0.device)
-        
-        # Linear interpolation: z_t = t·z1 + (1-t)·z0
-        z_t = t * z1 + (1 - t) * z0
-        
-        # Target velocity (constant along straight line)
-        target = z1 - z0
-        
-        return z_t, t, target
-    
-    @torch.no_grad()
-    def sample_ode(self, z0, num_steps=100):
-        """
-        Sample from the learned flow using Euler method.
-        
-        Solve ODE: dZ/dt = v(Z_t, t) from t=0 to t=1
-        
-        Args:
-            z0: [batch_size, dim] - initial samples from π₀
-            num_steps: number of discretization steps
-        Returns:
-            z1: [batch_size, dim] - transported samples ≈ samples from π₁
-        """
-        batch_size = z0.shape[0]
-        dt = 1.0 / num_steps
-        
-        z = z0.clone()
-        
-        for step in tqdm(range(num_steps), desc="Sampling ODE"):
-            t = torch.ones((batch_size, 1), device=z.device) * (step / num_steps)
-            
-            # Predict velocity
-            velocity = self.model(z, t)
-            
-            # Euler step
-            z = z + velocity * dt
-        
-        return z
 
 
 def train(
@@ -208,6 +45,8 @@ def train(
         rf_name = "2_rectified_flow" if reflow_from_checkpoint else "1_rectified_flow"
         output_path = get_run_dir(rf_name, seed)
     os.makedirs(output_path, exist_ok=True)
+    writer = SummaryWriter(output_path, flush_secs=30)
+
 
     # Save config
     config = {
@@ -225,6 +64,10 @@ def train(
         "input_data": input_data,
         "target_data": target_data,
     }
+    writer.add_text("method", "rectified_flow")
+    writer.add_text("output_path", output_path)
+    writer.add_scalar("batch_size", batch_size)
+    writer.add_scalar("seed", seed)
     save_config(config, output_path)
 
     # ── Data Loading ──────────────────────────────────────────────────────
@@ -238,6 +81,10 @@ def train(
     data = load_alae_data(DATA_PATH, input_data, target_data, device)
     X_sampler = data["X_sampler"]
     Y_sampler = data["Y_sampler"]
+    X_valid_sampler: TensorSampler = data["X_valid_sampler"]
+    Y_valid_sampler: TensorSampler = data["Y_valid_sampler"]
+    X_valid_tensorboard_indices = np.random.choice(len(X_valid_sampler), size=5, replace=False)
+    Y_valid_tensorboard_indices = np.random.choice(len(Y_valid_sampler), size=5, replace=False)
     X_test = data["X_test"]
     Y_test = data["Y_test"]
     x_inds_test = data["x_inds_test"]
@@ -266,8 +113,8 @@ def train(
         Z0_chunks, Z1_chunks = [], []
         n = len(X_train)
         with torch.no_grad():
-            for start in tqdm(range(0, n, reflow_batch_size), desc="Reflow ODE batches"):
-                z0_batch = X_train[start:start + reflow_batch_size].to(device)
+            for start in tqdm(range(0, n, batch_size*3), desc="Reflow ODE batches"):
+                z0_batch = X_train[start:start + batch_size*3].to(device)
                 z1_batch = prev_flow.sample_ode(z0_batch, num_steps=num_ode_steps)
                 Z0_chunks.append(z0_batch.cpu())
                 Z1_chunks.append(z1_batch.cpu())
@@ -316,9 +163,9 @@ def train(
     target_cmmd_act = None
 
     if compute_metrics:
-        stats_dir = target_stats_path if target_stats_path is not None else output_path
+        stats_dir = target_stats_path if target_stats_path is not None else pathlib.Path(output_path).parent
         target_cmmd_act, target_fid_act, mu_target, sigma_target = load_or_compute_target_stats(
-            stats_dir, evaluator, Y_test, target_data
+            str(stats_dir.absolute()), evaluator, Y_test, target_data
         )
 
     # ── Training Loop ──────────────────────────────────────────────────────
@@ -326,6 +173,8 @@ def train(
     print(f"\nStarting {rf_version} training: {input_data} → {target_data}")
     print(f"Training objective: min ∫₀¹ E[||X₁ - X₀ - v(X_t, t)||²] dt")
     start_time = time.perf_counter()
+    validation_period = int(max_steps / 50)
+    print(f"validating each {validation_period} step")
     
     with tqdm(range(max_steps)) as tbar:
         for step in tbar:
@@ -349,13 +198,45 @@ def train(
             loss.backward()
             optim.step()
             ema(model)
-            
             # Logging
             tbar.set_postfix(
                 loss=loss.item(),
                 v_std=pred_velocity.std().item()
             )
+            writer.add_scalar("train/loss", loss.item(), step)
+            writer.add_scalar("train/pred_velocity_std", pred_velocity.std().item(), step)
+            # writer.add_scalar("train/ema_decay", ema.betas[0], step)
+            writer.add_scalar("train/lr", optim.param_groups[0]['lr'], step)
+            writer.add_histogram("train/pred_velocity", pred_velocity.cpu().detach().numpy(), step)
             
+            if step > 0 and step % validation_period == 0:
+                # validation
+                model.eval()
+                with torch.no_grad():
+                    X = X_valid_sampler.sample(reflow_batch_size)
+                    Y = Y_valid_sampler.sample(reflow_batch_size)
+                    z_t_val, t_val, target_velocity_val = rectified_flow.get_train_tuple(X, Y)
+                    pred_velocity_val: torch.Tensor = model(z_t_val, t_val)
+                    val_loss = F.mse_loss(pred_velocity_val, target_velocity_val)
+                    writer.add_scalar("val/loss", val_loss.item(), step)
+                    writer.add_scalar("val/pred_velocity_std", pred_velocity_val.std().item(), step)
+                    writer.add_histogram("val/pred_velocity", pred_velocity_val.cpu().detach().numpy(), step)
+                    
+                    # Log sample reconstructions for qualitative monitoring
+                    X_tb = X_valid_sampler[X_valid_tensorboard_indices]
+                    Y_tb = Y_valid_sampler[Y_valid_tensorboard_indices]
+                    z_t_val, t_val, target_velocity_val = rectified_flow.get_train_tuple(X_tb, Y_tb)
+                    pred_velocity_val: torch.Tensor = model(z_t_val, t_val)
+                    Y_pred = rectified_flow.sample_ode(X_tb, num_steps=num_ode_steps, mute_tqdm=True)
+                    for image_index, image in enumerate(decode_latent_to_image(evaluator.alae_model, X_tb)):
+                        # import pdb; pdb.set_trace()
+                        write_image_to_tensorboard(writer, step, image_index, image, split='val', stage='source')
+                    for image_index, image in enumerate(decode_latent_to_image(evaluator.alae_model, Y_tb)):
+                        write_image_to_tensorboard(writer, step, image_index, image, split='val', stage='target')
+                    for image_index, image in enumerate(decode_latent_to_image(evaluator.alae_model, Y_pred)):
+                        write_image_to_tensorboard(writer, step, image_index, image, split='val', stage='prediction')
+                    
+                model.train()
             # Periodic checkpointing
             if step > 0 and step % 2000 == 0:
                 torch.save({
@@ -363,8 +244,10 @@ def train(
                     'optimizer': optim.state_dict(),
                     'step': step,
                 }, os.path.join(output_path, f'checkpoint_{step}.pth'))
+            writer.flush()
 
     # Save final model
+    writer.close()
     torch.save({
         'model': model.state_dict(),
         'optimizer': optim.state_dict(),
@@ -400,8 +283,8 @@ def train(
                 "fid": float(fid_score),
                 "cmmd": float(cmmd_score)
             })
-        
-        model.train()
+            writer.add_scalar("test/fid", final_metrics['fid'])
+            writer.add_scalar("test/cmmd", final_metrics['cmmd'])
 
     save_metrics(final_metrics, output_path)
 
@@ -409,10 +292,8 @@ def train(
     if evaluator.alae_model:
         print("\nGenerating visualization...")
         model.eval()
-        with torch.no_grad():
-            mapped_test_vis = rectified_flow.sample_ode(X_test.to(device), num_steps=num_ode_steps)
 
-        save_comparison_plot(
+        saved_comparison_path = save_comparison_plot(
             lambda x: rectified_flow.sample_ode(x, num_steps=num_ode_steps),
             X_test,
             x_inds_test,
@@ -422,6 +303,12 @@ def train(
             os.path.join(output_path, 'rectified_flow_transfer.png'),
             f"Rectified Flow ({num_ode_steps} steps)"
         )
+        with open(saved_comparison_path, 'rb') as f:
+            image = np.array(Image.open(f))
+            image = np.transpose(image, [2, 0, 1])
+            writer.add_image(f"comparison", image, step)
+            writer.flush()
+        
 
     rf_label = "2-RF" if reflow_from_checkpoint else "1-RF"
     print(f"\n✓ {rf_label} training complete! Results saved to: {output_path}")
@@ -429,36 +316,8 @@ def train(
     return final_metrics
 
 
-if __name__ == "__main__":
-    
-    parser = argparse.ArgumentParser(description="Rectified Flow for ALAE Adult/Children transformation")
-    parser.add_argument("--max_steps", type=int, default=10001, help="Number of training steps")
-    parser.add_argument("--no_metrics", action="store_true", help="Disable FID/CMMD evaluation")
-    parser.add_argument("--batch_size", type=int, default=512, help="Training batch size")
-    parser.add_argument("--reflow_batch_size", type=int, default=512, help="Batch size for ODE evaluation during reflow data generation")
-    parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate")
-    parser.add_argument("--model", type=str, default="LatentRFUNet", choices=["LatentRFUNet", "TimeConditionedMLP"], help="Model architecture to use")
-    parser.add_argument("--num_ode_steps", type=int, default=20, help="Number of ODE integration steps")
-    parser.add_argument("--hidden_dim", type=int, default=1024, help="Hidden layer dimension")
-    parser.add_argument("--num_layers", type=int, default=3, help="Number of MLP layers")
-    parser.add_argument("--activation", type=str, default='tanh', choices=['tanh', 'relu'], help="Activation function")
-    parser.add_argument("--reflow_from_checkpoint", type=str, default=None, help="Path to 1-RF checkpoint for reflow (2-RF)")
-    parser.add_argument("--seed", type=int, default=0xBADBEEF, help="Random seed")
-    parser.add_argument("--output_path", type=str, default=None, help="Output directory")
-    args = parser.parse_args()
-
-    train(
-        max_steps=args.max_steps,
-        compute_metrics=not args.no_metrics,
-        batch_size=args.batch_size,
-        reflow_batch_size=args.reflow_batch_size,
-        lr=args.lr,
-        num_ode_steps=args.num_ode_steps,
-        model_name=args.model,
-        hidden_dim=args.hidden_dim,
-        num_layers=args.num_layers,
-        activation=args.activation,
-        reflow_from_checkpoint=args.reflow_from_checkpoint,
-        seed=args.seed,
-        output_path=args.output_path
-    )
+def write_image_to_tensorboard(writer: SummaryWriter, step: int, image_index: int, image: np.ndarray, split: str = 'train', stage: str = 'source'):
+    image = np.array(Image.fromarray(image).resize((256, 256), Image.BILINEAR))
+    image = np.transpose(image, [2, 0, 1])
+    writer.add_image(f"{split}/{image_index}/{stage}", image, step)
+    writer.flush()

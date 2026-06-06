@@ -23,7 +23,7 @@ from tqdm import tqdm
 
 # torch.set_default_device("cuda")
 
-def load_model(default_config, training_artifacts_dir):
+def load_model(default_config, training_artifacts_dir) -> Model:
     lreq.use_implicit_lreq.set(True)
 
     indices = [0, 1, 2, 3, 4, 10, 11, 17, 19]
