@@ -1,10 +1,21 @@
 from typing import Callable, Union
 
+from PIL import Image
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
 from OFM.ALAE.alae_ffhq_inference import decode
 from OFM.ALAE.model import Model
+from torch.utils.tensorboard import SummaryWriter
+
+
+
+def write_image_to_tensorboard(writer: SummaryWriter, step: int, image_index: int, image: np.ndarray, split: str = 'train', stage: str = 'source'):
+    image = np.array(Image.fromarray(image).resize((256, 256), Image.BILINEAR))
+    image = np.transpose(image, [2, 0, 1])
+    writer.add_image(f"{split}/{image_index}/{stage}", image, step)
+    writer.flush()
+
 
 def save_comparison_plot(model: Union[torch.nn.Module, Callable], x_test, x_inds_test, test_inp_images, alae_model: Model, device, save_path, title_prefix="Mapped") -> str:
     # model can be MLP or DenseICNN. DenseICNN has push_nograd, MLP just forward.

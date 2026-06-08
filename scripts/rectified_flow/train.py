@@ -12,7 +12,7 @@ from PIL import Image
 
 from scripts.exp_utils.data_loader import download_data, download_alae_model, load_alae_data
 from scripts.exp_utils.eval_metrics import MetricsEvaluator
-from scripts.visualization import save_comparison_plot, decode_latent_to_image
+from scripts.visualization import save_comparison_plot, decode_latent_to_image, write_image_to_tensorboard
 
 from scripts.exp_utils.exp_utils import seed_all, get_device, setup_paths, get_run_dir, save_config, save_metrics, load_or_compute_target_stats
 # OFM Specific Imports
@@ -64,8 +64,9 @@ def train(
         "input_data": input_data,
         "target_data": target_data,
     }
-    writer.add_text("method", "rectified_flow")
+    writer.add_text("method", config['method'])
     writer.add_text("output_path", output_path)
+    writer.add_scalar("max_steps", max_steps)
     writer.add_scalar("batch_size", batch_size)
     writer.add_scalar("seed", seed)
     save_config(config, output_path)
@@ -314,10 +315,3 @@ def train(
     print(f"\n✓ {rf_label} training complete! Results saved to: {output_path}")
 
     return final_metrics
-
-
-def write_image_to_tensorboard(writer: SummaryWriter, step: int, image_index: int, image: np.ndarray, split: str = 'train', stage: str = 'source'):
-    image = np.array(Image.fromarray(image).resize((256, 256), Image.BILINEAR))
-    image = np.transpose(image, [2, 0, 1])
-    writer.add_image(f"{split}/{image_index}/{stage}", image, step)
-    writer.flush()
