@@ -5,7 +5,7 @@ import numpy as np
 
 sys.path.append(os.getcwd())
 
-from scripts.rectified_flow.rectified_flow_alae import train as train_rf
+from scripts.rectified_flow.run_rectified_flow_alae import train as train_rf
 
 
 def main():

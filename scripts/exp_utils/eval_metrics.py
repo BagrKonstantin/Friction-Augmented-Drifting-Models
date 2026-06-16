@@ -7,6 +7,7 @@ from tqdm import tqdm
 from scipy import linalg
 
 # Metrics imports
+from OFM.ALAE.model import Model
 from OFM.ofmsrc.inception import InceptionV3
 from OFM.ofmsrc.fid_score import calculate_frechet_distance
 from OFM.ALAE.alae_ffhq_inference import load_model, decode
@@ -16,14 +17,14 @@ class MetricsEvaluator:
         self.device = device
         self.compute_metrics = compute_metrics
         self.use_alae = use_alae
-        self.alae_model = None
+        self.alae_model: Model = None
         self.inception_model = None
         self.clip_model = None
 
         if self.use_alae:
-            self.alae_model = load_model("./OFM/ALAE/configs/ffhq.yaml",
+            self.alae_model: Model = load_model("./OFM/ALAE/configs/ffhq.yaml",
                                         training_artifacts_dir="data/alae_training_artifacts/ffhq/").to(self.device)
-        
+
         if self.compute_metrics:
             self._setup_models()
 

@@ -1,9 +1,12 @@
 #!/usr/bin/env python
 import os, sys
+from PIL import Image
+import numpy as np
 import torch
 import argparse
 import time
 from tqdm import tqdm
+from torch.utils.tensorboard import SummaryWriter
 
 # Add the root directory to sys.path so we can import from scripts
 # This is needed if this file is run directly or imported from a package
@@ -11,15 +14,14 @@ root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__fil
 if root_dir not in sys.path:
     sys.path.append(root_dir)
 
+from OFM.ofmsrc.alae_distributions import TensorSampler
 from scripts.exp_utils.exp_utils import seed_all, get_device, setup_paths, get_run_dir, save_config, save_metrics
 setup_paths()
 
 from scripts.exp_utils.data_loader import download_data, download_alae_model, load_alae_data, load_gender_transfer_data, load_imagenet_frogs_data
 from scripts.exp_utils.eval_metrics import MetricsEvaluator
 from scripts.dmf_gamma.models_and_losses import MLP, drift_loss_pytorch
-from scripts.visualization import save_comparison_plot
-
-# OFM Specific Imports
+from scripts.visualization import decode_latent_to_image, save_comparison_plot, write_image_to_tensorboard
 from OFM.ofmsrc.tools import EMA
 
 def train(
@@ -42,6 +44,7 @@ def train(
     if output_path is None:
         output_path = get_run_dir(method_name, seed)
     os.makedirs(output_path, exist_ok=True)
+    writer = SummaryWriter(output_path, flush_secs=30)
 
     # Save config
     config = {
@@ -57,6 +60,13 @@ def train(
         "kernel": kernel,
     }
     save_config(config, output_path)
+    writer.add_text("method", method_name)
+    writer.add_text("output_path", output_path)
+    writer.add_scalar("max_steps", max_steps)
+    writer.add_scalar("batch_size", batch_size)
+    writer.add_scalar("seed", seed)
+    validation_period = int(max_steps / 50)
+    print(f"validating each {validation_period} step")
 
     # ── Data Loading ──────────────────────────────────────────────────────
     DATA_PATH = os.path.join(setup_paths(), "data")
@@ -79,6 +89,10 @@ def train(
 
     X_sampler = data["X_sampler"]
     Y_sampler = data["Y_sampler"]
+    X_valid_sampler: TensorSampler = data["X_valid_sampler"]
+    Y_valid_sampler: TensorSampler = data["Y_valid_sampler"]
+    X_valid_tensorboard_indices = np.random.choice(len(X_valid_sampler), size=5, replace=False)
+    Y_valid_tensorboard_indices = np.random.choice(len(Y_valid_sampler), size=5, replace=False)
     X_test = data["X_test"]
     Y_test = data["Y_test"]
     x_inds_test = data["x_inds_test"]
@@ -138,6 +152,49 @@ def train(
 
             if step > 0 and step % 2000 == 0:
                 torch.save(model.state_dict(), os.path.join(output_path, 'checkpoint.pth'))
+            writer.add_scalar("train/loss", loss.item(), step)
+            writer.add_scalar("train/scale", info["scale"].item(), step)
+            writer.add_scalar("train/force_norm", info["force_norm"].item(), step)
+            for r in r_list:
+                writer.add_scalar(f"train/loss_{r}", info[f"loss_{r}"].item(), step)
+            writer.add_scalar("train/lr", optim.param_groups[0]['lr'], step)
+           
+            if step > 0 and step % validation_period == 0:
+                # validation
+                model.eval()
+                with torch.no_grad():
+                    
+                    X = X_valid_sampler.sample(batch_size)
+                    Y = Y_valid_sampler.sample(batch_size)
+                    Y_pred = model(X.to(device))
+                    loss, info = drift_loss_pytorch(
+                        Y_pred.unsqueeze(0),
+                        Y.unsqueeze(0),
+                        R_list=r_list,
+                        friction_coeff=0.0
+                    )
+
+                    writer.add_scalar("val/loss", loss.item(), step)
+                    writer.add_scalar("val/scale", info["scale"].item(), step)
+                    writer.add_scalar("val/force_norm", info["force_norm"].item(), step)
+                    for r in r_list:
+                        writer.add_scalar(f"val/loss_{r}", info[f"loss_{r}"].item(), step)
+                    writer.add_scalar("val/lr", optim.param_groups[0]['lr'], step)
+                    
+                    # writing images to tensorboard
+                    X_tb = X_valid_sampler[X_valid_tensorboard_indices]
+                    Y_tb = Y_valid_sampler[Y_valid_tensorboard_indices]
+                    Y_tb_pred = model(X.to(device))
+                    
+                    for image_index, image in enumerate(decode_latent_to_image(evaluator.alae_model, X_tb)):
+                        write_image_to_tensorboard(writer, step, image_index, image, split='val', stage='source')
+                    for image_index, image in enumerate(decode_latent_to_image(evaluator.alae_model, Y_tb)):
+                        write_image_to_tensorboard(writer, step, image_index, image, split='val', stage='target')
+                    for image_index, image in enumerate(decode_latent_to_image(evaluator.alae_model, Y_tb_pred)):
+                        write_image_to_tensorboard(writer, step, image_index, image, split='val', stage='prediction')
+            writer.flush()
+        
+                    
 
     torch.save(model.state_dict(), os.path.join(output_path, 'checkpoint_final.pth'))
     end_time = time.perf_counter()
@@ -159,18 +216,21 @@ def train(
 
             print(f"\nFinal FID over {len(X_test)} samples = {fid_score:.4f}")
             print(f"Final CMMD over {len(X_test)} samples = {cmmd_score:.4f}")
-            
-            final_metrics.update({
-                "fid": float(fid_score),
-                "cmmd": float(cmmd_score)
-            })
+            final_metrics.update({"fid": float(fid_score), "cmmd": float(cmmd_score)})
+            writer.add_scalar("test/fid", final_metrics['fid'])
+            writer.add_scalar("test/cmmd", final_metrics['cmmd'])
         model.train()
     save_metrics(final_metrics, output_path)
 
     # ── Results Visualization ──────────────────────────────────────────────
     if evaluator.alae_model and data_loader != "imagenet":
         plot_name = f'{method_name}_transfer_faces.png'
-        save_comparison_plot(model, X_test, x_inds_test, test_inp_images, evaluator.alae_model, device, os.path.join(output_path, plot_name), "DM Mapped")
+        saved_comparison_path = save_comparison_plot(model, X_test, x_inds_test, test_inp_images, evaluator.alae_model, device, os.path.join(output_path, plot_name), "DM Mapped")
+        with open(saved_comparison_path, 'rb') as f:
+            image = np.array(Image.open(f))
+            image = np.transpose(image, [2, 0, 1])
+            writer.add_image(f"comparison", image, step)
+            writer.flush()
     elif data_loader == "imagenet":
         # Basic ImageNet image saving
         import torchvision.utils as vutils
@@ -182,6 +242,11 @@ def train(
         plot_name = f'{method_name}_imagenet_frogs.png'
         vutils.save_image(gen_imgs, os.path.join(output_path, plot_name), nrow=4)
         print(f"Saved ImageNet generations to {plot_name}")
+        with open(plot_name, 'rb') as f:
+            image = np.array(Image.open(f))
+            image = np.transpose(image, [2, 0, 1])
+            writer.add_image(f"comparison", image, step)
+            writer.flush()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
