@@ -19,15 +19,17 @@ class MetricsEvaluator:
         self.alae_model = None
         self.inception_model = None
         self.clip_model = None
+
+        if self.use_alae:
+            self.alae_model = load_model("./OFM/ALAE/configs/ffhq.yaml",
+                                        training_artifacts_dir="data/alae_training_artifacts/ffhq/").to(self.device)
         
         if self.compute_metrics:
             self._setup_models()
 
     def _setup_models(self):
         print("Setting up Evaluation models (FID & CMMD)...")
-        if self.use_alae:
-            self.alae_model = load_model("./OFM/ALAE/configs/ffhq.yaml",
-                                        training_artifacts_dir="data/alae_training_artifacts/ffhq/").to(self.device)
+
         self.inception_model = InceptionV3([3]).to(self.device)
         self.inception_model.eval()
 
