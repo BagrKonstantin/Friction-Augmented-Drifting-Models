@@ -33,7 +33,8 @@ def train(
     target_data="CHILDREN",
     output_path=None,
     method_name="dm",
-    data_loader="alae"
+    data_loader="alae",
+    kernel="laplace"
 ):
     device = get_device()
     seed_all(seed)
@@ -53,6 +54,7 @@ def train(
         "input_data": input_data,
         "target_data": target_data,
         "data_loader": data_loader,
+        "kernel": kernel,
     }
     save_config(config, output_path)
 
@@ -118,7 +120,8 @@ def train(
                 Y_gen.unsqueeze(0),
                 Y.unsqueeze(0),
                 R_list=r_list,
-                friction_coeff=0.0
+                friction_coeff=0.0,
+                kernel=kernel
             )
 
             optim.zero_grad()
@@ -162,7 +165,6 @@ def train(
                 "cmmd": float(cmmd_score)
             })
         model.train()
-
     save_metrics(final_metrics, output_path)
 
     # ── Results Visualization ──────────────────────────────────────────────
@@ -193,7 +195,11 @@ if __name__ == "__main__":
     parser.add_argument("--input_data", type=str, default="ADULT")
     parser.add_argument("--target_data", type=str, default="CHILDREN")
     parser.add_argument("--seed", type=int, default=0xBADBEEF)
+    parser.add_argument("--kernel", type=str, default="laplace", choices=["laplace", "rbf", "cauchy"])
     args = parser.parse_args()
+
+    if args.method_name == "dm" and args.kernel != "laplace":
+        args.method_name = f"dm_{args.kernel}"
 
     train(
         max_steps=args.max_steps,
@@ -205,5 +211,6 @@ if __name__ == "__main__":
         data_loader=args.data_loader,
         input_data=args.input_data,
         target_data=args.target_data,
-        seed=args.seed
+        seed=args.seed,
+        kernel=args.kernel
     )
