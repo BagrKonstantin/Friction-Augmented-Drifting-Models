@@ -1,5 +1,0 @@
-runs/
-data/
-wandb/
-__pycache__/
-*.pyc
