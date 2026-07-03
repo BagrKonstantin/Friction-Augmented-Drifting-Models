@@ -37,7 +37,6 @@ def drift_loss_pytorch(
     weight_neg=None,
     R_list=(0.02, 0.05, 0.2),
     friction_coeff=0.0,
-    kernel="laplace",
 ):
     B, C_g, S = gen.shape
     C_p = fixed_pos.shape[1]
@@ -79,21 +78,9 @@ def drift_loss_pytorch(
         force_across_R = torch.zeros_like(old_gen_scaled)
 
         for R in R_list:
-            if kernel == "laplace":
-                logits = -dist_normed / R
-                affinity = F.softmax(logits, dim=-1)
-                aff_transpose = F.softmax(logits, dim=-2)
-            elif kernel == "rbf":
-                logits = -(dist_normed ** 2) / (R ** 2)
-                affinity = F.softmax(logits, dim=-1)
-                aff_transpose = F.softmax(logits, dim=-2)
-            elif kernel == "cauchy":
-                K_val = 1.0 / (1.0 + (dist_normed / R) ** 2)
-                affinity = K_val / K_val.sum(dim=-1, keepdim=True)
-                aff_transpose = K_val / K_val.sum(dim=-2, keepdim=True)
-            else:
-                raise ValueError(f"Unknown kernel: {kernel}")
-
+            logits = -dist_normed / R
+            affinity = F.softmax(logits, dim=-1)
+            aff_transpose = F.softmax(logits, dim=-2)
             affinity = torch.sqrt(torch.clamp(affinity * aff_transpose, min=1e-6))
             affinity = affinity * targets_w[:, None, :]
 
