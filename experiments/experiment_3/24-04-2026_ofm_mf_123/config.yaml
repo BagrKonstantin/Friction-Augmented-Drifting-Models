@@ -1,0 +1,8 @@
+batch_size: 128
+input_data: MAN
+inv_tolerance: 0.01
+lr: 0.001
+max_steps: 10002
+method: ofm_mf
+seed: 123
+target_data: WOMAN

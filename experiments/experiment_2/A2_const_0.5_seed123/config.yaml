@@ -1,0 +1,12 @@
+batch_size: 515
+gamma_schedule: const_0.5
+input_data: ADULT
+lr: 0.0005
+max_steps: 30001
+method: dmf_gamma
+r_list:
+- 0.005
+- 0.01
+- 0.02
+seed: 123
+target_data: CHILDREN

@@ -1,0 +1,11 @@
+batch_size: 515
+input_data: MAN
+lr: 0.0005
+max_steps: 30001
+method: dm_mf
+r_list:
+- 0.005
+- 0.01
+- 0.02
+seed: 123
+target_data: WOMAN

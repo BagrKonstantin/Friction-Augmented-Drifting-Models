@@ -1,0 +1,7 @@
+{
+    "training_time": 343.1922936159972,
+    "gamma_schedule": "quadratic",
+    "seed": 2024,
+    "fid": 10.27473356463264,
+    "cmmd": 0.004410743713378906
+}

@@ -1,0 +1,13 @@
+batch_size: 32
+friction_on: true
+input_data: ADULT
+lr: 0.0005
+max_steps: 10001
+method: dmf
+r_list:
+- 0.005
+- 0.01
+- 0.02
+seed: 123
+target_data: CHILDREN
+train_frac: 0.5

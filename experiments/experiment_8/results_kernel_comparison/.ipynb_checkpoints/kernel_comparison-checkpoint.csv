@@ -1,0 +1,4 @@
+cond,kernel,friction,source,seed42_fd,seed123_fd,seed777_fd,mean_fd,std_fd,seed42_mmd2,seed123_mmd2,seed777_mmd2,mean_mmd2,std_mmd2,seed42_time,seed123_time,seed777_time,mean_time
+A,Laplace,linear,Experiment_4/results_table2/table2.csv,0.005007,0.010316,0.002123,0.005815,0.003393,,,,,,,,,
+B,Gaussian,linear,trained,0.003783,0.010332,0.005869,0.006661,0.002732,0.0001711,0.0002886,0.0001004,0.0001867,0.0000776,108.4,124.4,89.4,107.4
+C,Gaussian,zero,trained,0.388135,0.027280,0.028338,0.147918,0.169860,0.0086241,0.0010526,0.0007861,0.0034876,0.0036337,129.3,90.8,111.4,110.5
