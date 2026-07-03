@@ -1,0 +1,6 @@
+[submodule "OFM"]
+	path = OFM
+	url = https://github.com/Jhomanik/Optimal-Flow-Matching.git
+[submodule "cmmd_pytorch"]
+	path = cmmd_pytorch
+	url = https://github.com/BagrKonstantin/cmmd-pytorch.git
