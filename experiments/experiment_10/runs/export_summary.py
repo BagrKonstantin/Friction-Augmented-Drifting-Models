@@ -11,7 +11,7 @@ import pathlib
 import re
 from collections import defaultdict
 
-ROOT = pathlib.Path(__file__).parent
+ROOT = pathlib.Path(__file__).resolve().parent.parent
 OUT  = ROOT / "summary_export.csv"
 
 # collect values keyed by (group, model)
@@ -55,7 +55,7 @@ for (group, model), vals in sorted(data.items()):
     })
 
 with open(OUT, "w", newline="") as f:
-    writer = csv.DictWriter(f, fieldnames=["group", "model", "n_seeds",
+    writer = csv.DictWriter(f, lineterminator="\n", fieldnames=["group", "model", "n_seeds",
                                            "fid_mean", "fid_std",
                                            "cmmd_mean", "cmmd_std"])
     writer.writeheader()
