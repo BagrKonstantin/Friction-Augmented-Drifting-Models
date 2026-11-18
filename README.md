@@ -1,7 +1,7 @@
-# Attraction, Repulsion, and Friction: Introducing DMF
+# Friction-Augmented Drifting Models for Resource-Efficient Domain Translation
 
 > **Paper**: [arXiv:2604.18194](https://arxiv.org/abs/2604.18194)  
-> **University of Luxembourg** — Arkadii Kazanskii, Tatiana Petrova, Konstantin Bagrianskii, Aleksandr Puzikov, Radu State
+> **Authors** — Arkadii Kazanskii, Tatiana Petrova, Andrey Ustyuzhanin, Konstantin Bagrianskii, Aleksandr Puzikov, Radu State
 
 ---
 
@@ -12,175 +12,74 @@ A research codebase for **image-to-image translation in ALAE latent space**, com
 | Method | Description | Training | Inference | OT coupling |
 |--------|-------------|----------|-----------|-------------|
 | **DMF** | Drifting Model with Friction — our proposed method | Low | Fast | — |
-| **DM** | Baseline Drifting Model (Lambert et al., 2025) | Low | Fast | — |
+| **DM** | Baseline Drifting Model (Deng et al., 2026) | Low | Fast | — |
 | **OFM** | Optimal Flow Matching via ICNN (Kornilov et al., 2024) | High | 1-step | ✅ Global |
 | **OT-CFM** | Conditional Flow Matching with mini-batch OT (Tong et al., 2024) | Medium | ODE | ✅ Mini-batch |
 | **RF** | Rectified Flow with optional reflow (Liu et al., 2023) | Medium | ODE / 1-step | — |
 
-## Repository Structure
+## Repository structure
 
-```
-FlowMatching/
-├── experiments/              # Main experiment framework — all 5 methods
-│   ├── otcfm/                # OT-CFM training, inference, multi-seed runner
-│   ├── rectified_flow/       # Rectified Flow (1-RF, 2-RF) training & inference
-│   ├── dm_alae.py            # Drifting Model
-│   ├── dmf_alae.py           # Drifting Model with Friction (ours)
-│   ├── ofm_alae.py           # Optimal Flow Matching
-│   ├── data_loader.py        # FFHQ data loading & automatic download
-│   ├── eval_metrics.py       # FID & CMMD evaluation
-│   ├── models_and_losses.py  # MLP architectures and drift loss
-│   ├── exp_utils.py          # Seeding, path setup, config & metrics I/O
-│   ├── visualization.py      # Face comparison plots
-│   └── run_multiple_seeds.py # Multi-seed batch runner (DM + DMF)
-│
-├── OFM/                      # Optimal Flow Matching (NeurIPS 2024)
-│   └── ALAE/                 # Pre-trained ALAE weights & decoder
-├── CFM/                      # TorchCFM library (MIT)
-├── RectifiedFlow/            # Official RF implementation (ICLR 2023)
-├── DM/                       # Drifting Models reference (JAX)
-├── cmmd_pytorch/             # CLIP-MMD metric
-│
-├── checkpoints/              # Saved model checkpoints
-├── pics_in/ pics_out/        # Inference image I/O
-├── *.ipynb                   # Jupyter notebooks (toy problems, tutorials)
-└── requirements.txt
-```
+The training code is in `scripts/`. Archived configurations, metrics and checkpoints are organised by study in `experiments/`.
+
+| Path | Contents |
+|---|---|
+| `scripts/dm/`, `scripts/dmf/`, `scripts/ofm/` | FFHQ training entry points |
+| `scripts/dmf_gamma/` | Drift schedules, sweep runner and drift loss |
+| `scripts/otcfm/`, `scripts/rectified_flow/` | Flow-matching baselines |
+| `scripts/exp_utils/` | Data loading, FID/CMMD evaluation and run logging |
+| `scripts/training_set_ablation/` | Limited-data experiment |
+| `OFM/`, `cmmd_pytorch/` | Git submodules for the OFM/ALAE code and CMMD implementation |
+
+## Experiment records
+
+| Folder under `experiments/` | Study |
+|---|---|
+| `experiment_1/` | FFHQ adult-to-child DM, DMF and OFM. The May OFM runs used batch size 32 and the April OFM runs used 128. Each run has its own configuration and metrics. |
+| `experiment_2/` | Five-seed FFHQ drift-schedule comparison, batch size 515 |
+| `experiment_3/` | FFHQ male-to-female translation |
+| `experiment_4/` | Two-dimensional Gaussian mixture with component means (0,0) and (3,2). The Laplace-kernel FD values are in `results_table2/table2.csv`. The symmetric mixture in the paper's Table 2 is a separate experiment. |
+| `experiment_8/` | Gaussian-kernel comparison on the same (0,0)/(3,2) mixture, with the linear Laplace reference carried over from `experiment_4/` |
+| `experiment_9/` | Eight-component Gaussian mixture |
+| `experiment_10/` | Half-data FFHQ study. `summary_export.csv` aggregates seeds 42, 123 and 777 for both DM and DMF. Regenerate it with `python experiments/experiment_10/runs/export_summary.py` from the repository root. |
+
+The paper reports three-seed summaries for the symmetric two-dimensional mixture and the FFHQ RF, 2-RF and OT-CFM comparisons. Table 4 gives all five Apple Silicon learning-rate pairs. The full-precision scores are in `anc/ffhq_lr_pairs.csv` in the arXiv source package.
 
 ## Installation
 
-**Requirements**: Python 3.12, CUDA GPU (recommended), 16 GB+ RAM.
+The archived FFHQ experiments used Python 3.12 and CUDA. Initialise the two Git submodules when cloning.
 
 ```bash
-git clone <repository-url>
-cd FlowMatching
+git clone --recurse-submodules https://github.com/BagrKonstantin/Friction-Augmented-Drifting-Models.git
+cd Friction-Augmented-Drifting-Models
 python3.12 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 ```
 
-Data and model weights are **downloaded automatically** on first run (FFHQ latents + ALAE weights).
+## FFHQ training
 
-## Quick Start
-
-All scripts are run from the repository root. Each creates a timestamped directory under `experiments/runs/` with a config YAML, metrics JSON, checkpoint, and a face-comparison plot.
-
-### Train a single model
+Run these examples from the repository root. They select the adult-to-child configuration with 10,001 updates. The two OFM settings in the paper use batch sizes 32 and 128.
 
 ```bash
-# Drifting Model with Friction (DMF — ours)
-python scripts/dmf_alae.py --max_steps 10000 --seed 42
-
-# Drifting Model (baseline)
-python scripts/dm_alae.py --max_steps 10000 --seed 42
-
-# Optimal Flow Matching
-python scripts/ofm_alae.py --max_steps 10000 --seed 42
-
-# OT-CFM
-python scripts/otcfm/otcfm_alae.py --max_steps 10000 --seed 42
-
-# Rectified Flow (1-RF)
-python scripts/rectified_flow/rectified_flow_alae.py --max_steps 10000 --seed 42
-
-# Rectified Flow (2-RF — reflow pass)
-python scripts/rectified_flow/rectified_flow_alae.py --max_steps 10000 --seed 42 --reflow
+python -m scripts.dm.run_dm_alae --max_steps 10001 --batch_size 32 --lr 0.0005 --seed 42
+python -m scripts.dmf.run_dmf_alae --max_steps 10001 --batch_size 32 --lr 0.0005 --gamma_schedule linear --seed 42
+python -m scripts.ofm.run_ofm_alae --max_steps 10001 --batch_size 32 --lr 0.001 --seed 42
 ```
 
-### Multi-seed batch runs
+These FFHQ entry points create a dated run directory under `experiments/`. The saved files include `config.yaml`, the final model and `metrics.json`. Training times in those records are in seconds. Use `--help` for each entry point's arguments.
 
-```bash
-# DM + DMF across seeds [42, 123, 777, 1234, 2024]
-python scripts/run_multiple_seeds.py --max_steps 30000
+## Data and evaluation
 
-# OT-CFM across multiple seeds
-python scripts/otcfm/run_multiple_seeds_otcfm.py --max_steps 30000
+The adult-to-child loader reads 512-dimensional FFHQ ALAE latents. Its default split uses the first 55,000 rows for training, the next 5,000 for validation and the final 10,000 for testing. Adult and child subsets exclude unknown ages. The reduced-data and sex-attribute experiments have their own loaders and configurations.
 
-# Rectified Flow across multiple seeds
-python scripts/rectified_flow/run_multiple_seeds_rf.py --max_steps 30000
-```
-
-### Face attribute tasks
-
-Use `--input_data` / `--target_data` to select a translation task:
-
-```bash
-python scripts/dmf_alae.py --input_data ADULT --target_data CHILDREN --seed 42
-python scripts/dmf_alae.py --input_data MAN   --target_data WOMAN    --seed 42
-```
-
-Supported values: `ADULT`, `CHILDREN`, `MAN`, `WOMAN`.
-
-### Inference on custom images
-
-```bash
-python scripts/otcfm/otcfm_inference.py       --checkpoint scripts/runs/<run_dir>/checkpoint_final.pth
-python scripts/rectified_flow/rectified_flow_inference.py --checkpoint scripts/runs/<run_dir>/checkpoint_final.pth
-```
-
-## Command-Line Arguments
-
-All training scripts share these common flags:
-
-| Argument | Default | Description |
-|----------|---------|-------------|
-| `--max_steps` | 10001 | Training iterations |
-| `--batch_size` | method-dependent | Mini-batch size |
-| `--lr` | method-dependent | Learning rate |
-| `--seed` | 42 | Random seed |
-| `--input_data` | ADULT | Source distribution |
-| `--target_data` | CHILDREN | Target distribution |
-| `--no_metrics` | False | Skip FID/CMMD (faster) |
-
-**DMF-specific**: `--friction_on`, `--r_list`  
-**OFM-specific**: `--inv_tolerance` (ICNN solver tolerance)
-
-## Output Structure
-
-```
-experiments/runs/DD-MM-YYYY-HH-MM_<method>_<seed>/
-├── config.yaml              # Full training configuration
-├── metrics.json             # FID, CMMD, training_time_seconds
-├── checkpoint_final.pth     # Final model weights
-├── checkpoint.pth           # Mid-training checkpoint (step 2000)
-└── *_transfer_faces.png     # Source → generated face comparison
-```
-
-## Data
-
-The FFHQ dataset is used via **512-dimensional ALAE latent codes** (not raw pixels), which dramatically reduces training cost while preserving perceptual quality.
-
-| Split | Size | Content |
-|-------|------|---------|
-| Train | 60,000 | Latents + age/gender metadata |
-| Test  | 10,000 | Latents + reference RGB images |
-
-Attribute filters: **ADULT** (age ≥ 18), **CHILDREN** (age < 18), **MAN** (male), **WOMAN** (female).
-
-The ALAE decoder (1024×1024) reconstructs images from latents for FID/CMMD evaluation and visualization.
-
-## Evaluation Metrics
-
-**FID** (Fréchet Inception Distance) — InceptionV3 feature space, lower is better.  
-**CMMD** (CLIP Maximum Mean Discrepancy) — CLIP embedding space, lower is better, more aligned with human perception.
-
-Both are computed every 2000 steps and at the end of training. Use `--no_metrics` to disable during development.
-
-## Notebooks
-
-| Notebook | Description |
-|----------|-------------|
-| `tutorial_training_8_gaussians_to_moons.ipynb` | 2D toy problem: 8 Gaussians → moons |
-| `dm_gaussian_mixture_new.ipynb` | Drifting Model on 2D Gaussian mixtures |
-| `probmodels-flowmatching.ipynb` | Flow matching theory walkthrough |
-| `main.ipynb` | Main experimental notebook |
+FID uses Inception features and CMMD uses CLIP image embeddings of decoded samples. Lower values are better for both metrics.
 
 ## References
 
 ```bibtex
 @article{kazanskii2026dmf,
-  title   = {Attraction, Repulsion, and Friction: Introducing DMF, a Friction-Augmented Drifting Model},
-  author  = {Kazanskii, Arkadii and Petrova, Tatiana and Bagrianskii, Konstantin and Puzikov, Aleksandr and State, Radu},
+  title   = {Friction-Augmented Drifting Models for Resource-Efficient Domain Translation},
+  author  = {Kazanskii, Arkadii and Petrova, Tatiana and Ustyuzhanin, Andrey and Bagrianskii, Konstantin and Puzikov, Aleksandr and State, Radu},
   journal = {arXiv preprint arXiv:2604.18194},
   year    = {2026}
 }
@@ -206,11 +105,11 @@ Both are computed every 2000 steps and at the end of training. Use `--no_metrics
   year      = {2023}
 }
 
-@article{lambert2025generative,
+@article{deng2026drifting,
   title   = {Generative Modeling via Drifting},
-  author  = {Lambert, Alex and others},
+  author  = {Deng, Mingyang and Li, He and Li, Tianhong and Du, Yilun and He, Kaiming},
   journal = {arXiv preprint arXiv:2602.04770},
-  year    = {2025}
+  year    = {2026}
 }
 
 @inproceedings{pidhorskyi2020adversarial,
@@ -221,13 +120,6 @@ Both are computed every 2000 steps and at the end of training. Use `--no_metrics
 }
 ```
 
-## License
+## Third-party software
 
-This repository incorporates code from multiple sources:
-- `CFM/` — MIT License (TorchCFM)
-- `OFM/`, `DM/`, `RectifiedFlow/` — see individual subdirectory licenses
-- `experiments/` — see paper license
-
----
-
-**Last updated**: May 2026 &nbsp;|&nbsp; **Status**: Active development
+See the upstream [OFM](https://github.com/Jhomanik/Optimal-Flow-Matching) and [CMMD](https://github.com/BagrKonstantin/cmmd-pytorch) repositories for the components included as submodules.
